@@ -7,6 +7,6 @@ La pluma se genera por código (`src/feather.js`), con parámetros editables (la
 
 ```bash
 npm install
-npm run dev      # visor interactivo (arrastra para rotar)
+npm run dev      # visor interactivo (rota sola; arrastra para girarla)
 npm run export   # escribe public/pluma.glb
 ```

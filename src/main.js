@@ -35,7 +35,10 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((time) => {
+  if (!window.__still) feather.position.y = Math.sin(time / 1400) * 0.06; // flotación suave
+  controls.autoRotate = !window.__still;
+  controls.autoRotateSpeed = 0.8;
   controls.update();
   renderer.render(scene, camera);
 });
