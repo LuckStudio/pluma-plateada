@@ -1,5 +1,6 @@
 # Publica la app en GitHub Pages cada vez que se sube algo a main.
-# Activar una vez: Settings → Pages → Source: «GitHub Actions».
+# Compila la app y deja el resultado en la rama gh-pages, que es la que sirve Pages
+# (Settings → Pages → Deploy from a branch → gh-pages / root).
 name: Publicar en GitHub Pages
 
 on:
@@ -8,9 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -19,21 +18,22 @@ concurrency:
 jobs:
   publicar:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.despliegue.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-      - id: despliegue
-        uses: actions/deploy-pages@v4
+      - name: Subir dist/ a la rama gh-pages
+        working-directory: dist
+        run: |
+          touch .nojekyll
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Publicar ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
