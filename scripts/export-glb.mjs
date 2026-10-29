@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { createCanvas } from '@napi-rs/canvas';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
-import { createFeather } from '../src/feather.js';
+import { createFeather } from '../src/three/feather.js';
 
 // GLTFExporter usa FileReader para empaquetar el binario; Node no lo trae.
 globalThis.FileReader = class {
