@@ -151,9 +151,11 @@ Cambio respecto al brief: separo **Escribir** (fase 1) de **Poesía** (fase 2). 
 
 ---
 
-## 8. Preguntas abiertas
+## 8. Decisiones tomadas
 
-1. **¿Para quién es la primera versión?** ¿Solo para tu amigo, o se publicará para más poetas? Si es solo para él, se puede saltar cuentas y nube al principio.
-2. **¿Dónde escribe más?** ¿Ordenador, tablet o móvil? Eso decide si el giroscopio y el diseño móvil van antes.
-3. **¿Necesita sincronizar entre dispositivos** desde el principio, o basta con trabajar en local y hacer copias de seguridad?
-4. **¿Métrica clásica?** ¿Escribe en verso medido (sonetos, endecasílabos) o sobre todo en verso libre? Eso cambia la prioridad de la fase 2.
+1. **Uso:** para un amigo; más adelante será un repositorio público en el perfil de LuckStudio, así que el código y el README se cuidan desde el principio.
+2. **Móvil primero:** todo se diseña a 390 px y escala a un editor de tres columnas en ordenador.
+3. **Sin cuentas ni nube:** los datos viven en el móvil (IndexedDB) con almacenamiento persistente (`navigator.storage.persist()`), para que el navegador no los borre. La app es instalable (PWA) y funciona sin conexión. Las copias se hacen exportando e importando un archivo `.pluma`, con un recordatorio semanal opcional.
+4. **Métrica completa:** silabeo, sinalefas, acentos y tipo de verso, esquema de rima (consonante y asonante), detección de formas (soneto, romance, décima…), rimas, sinónimos y antónimos. Todo es opcional y se puede ocultar con un toque.
+
+Propuesta visual: https://claude.ai/artifact/21SgV5PGp5UzwjY5P6NkdL
