@@ -7,7 +7,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { createBook, db, poemTitle, uid, updateBook, type Book, type BookLayout, type Poem } from '../db/db';
 import { nombreArchivo } from '../db/backup';
 import { Icon } from '../components/Icon';
-import { Seg, Sheet, Toggle, TopBar } from '../components/ui';
+import { Seg, Sheet, Toggle, TopBar, useConfirmar } from '../components/ui';
 import { useFeather } from '../components/Feather';
 import { guardarArchivo } from '../lib/download';
 import { useDebounced, useToast } from '../lib/hooks';
@@ -87,6 +87,7 @@ function BookEditor({ book, poems }: { book: Book; poems: Poem[] }) {
   const [, navigate] = useLocation();
   const toast = useToast();
   const feather = useFeather();
+  const confirmar = useConfirmar();
   const [tab, setTab] = useState<Tab>('estructura');
   const [anadir, setAnadir] = useState<string | null>(null);
   const [exportando, setExportando] = useState<'' | 'pdf' | 'epub'>('');
@@ -160,7 +161,7 @@ function BookEditor({ book, poems }: { book: Book; poems: Poem[] }) {
         className="btn danger block"
         style={{ marginTop: 32 }}
         onClick={async () => {
-          if (!confirm('¿Eliminar este libro? Los poemas no se borran.')) return;
+          if (!(await confirmar('¿Eliminar este libro?', 'Los poemas no se borran: siguen en tu biblioteca.'))) return;
           await db.books.delete(book.id);
           navigate('/libros');
         }}
@@ -179,6 +180,7 @@ function Estructura({ book, porId, onAnadir }: { book: Book; porId: Map<string, 
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  const confirmar = useConfirmar();
   const setParts = (parts: Book['parts']) => updateBook(book.id, { parts });
   const moverParte = (i: number, d: -1 | 1) => setParts(arrayMove(book.parts, i, i + d));
 
@@ -211,9 +213,9 @@ function Estructura({ book, porId, onAnadir }: { book: Book; porId: Map<string, 
               <button
                 className="icon-btn"
                 aria-label="Eliminar parte"
-                onClick={() => {
+                onClick={async () => {
                   if (book.parts.length === 1) return;
-                  if (ids.length && !confirm('¿Quitar esta parte? Sus poemas seguirán en tu biblioteca.')) return;
+                  if (ids.length && !(await confirmar('¿Quitar esta parte?', 'Sus poemas seguirán en tu biblioteca.', 'Quitar'))) return;
                   setParts(book.parts.filter((p) => p.id !== parte.id));
                 }}
                 disabled={book.parts.length === 1}

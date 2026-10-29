@@ -4,10 +4,12 @@
   "description": "Un editor de poemas dedicado a mi gran amigo, al que le encanta escribir, desarrollo para que pueda retomar su arte siempre que el quiera",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
     "dev": "vite",
     "build": "vite build",
-    "export": "node scripts/export-glb.mjs"
+    "export": "node scripts/export-glb.mjs",
+    "artifact": "vite build && node scripts/artifact-page.mjs",
+    "typecheck": "tsc -p ."
   },
   "repository": {
     "type": "git",

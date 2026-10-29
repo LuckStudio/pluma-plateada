@@ -7,7 +7,7 @@ import { analizarPoema } from '../poesia';
 import { AnalysisPanel, type PanelTab } from '../components/AnalysisPanel';
 import { PoemEditor, type Caret, type PoemEditorHandle } from '../components/PoemEditor';
 import { Icon, type IconName } from '../components/Icon';
-import { Seg, Sheet } from '../components/ui';
+import { Seg, Sheet, useConfirmar } from '../components/ui';
 import { useFeather } from '../components/Feather';
 import { guardarArchivo } from '../lib/download';
 import { haceCuanto, useDebounced, useMedia, useSettings, useToast } from '../lib/hooks';
@@ -32,6 +32,7 @@ function Editor({ poem }: { poem: Poem }) {
   const [, navigate] = useLocation();
   const toast = useToast();
   const feather = useFeather();
+  const confirmar = useConfirmar();
   const [settings, setSettings] = useSettings();
   const desktop = useMedia('(min-width: 1024px)');
   const [text, setText] = useState(poem.text);
@@ -289,8 +290,8 @@ function Editor({ poem }: { poem: Poem }) {
               label="Eliminar poema"
               danger
               onClick={async () => {
-                if (!confirm('¿Eliminar este poema? No se puede deshacer (salvo que tengas una copia de seguridad).')) return;
                 setMenu(false);
+                if (!(await confirmar('¿Eliminar este poema?', 'No se puede deshacer, salvo que tengas una copia de seguridad.'))) return;
                 await deletePoem(poem.id);
                 toast('Poema eliminado');
                 navigate('/');

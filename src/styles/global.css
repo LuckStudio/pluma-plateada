@@ -1,6 +1,6 @@
 /* ───────── Temas ───────── */
 :root,
-:root[data-theme='plata'] {
+:root[data-tema='plata'] {
   color-scheme: light;
   --bg: #f3f5f9;
   --surface: #ffffff;
@@ -20,7 +20,7 @@
   --ink: linear-gradient(90deg, #35c9c4, #6f66f2, #c062e0);
   --nav-bg: rgba(255, 255, 255, 0.86);
 }
-:root[data-theme='papel'] {
+:root[data-tema='papel'] {
   color-scheme: light;
   --bg: #f4efe4;
   --surface: #fffcf6;
@@ -40,7 +40,7 @@
   --ink: linear-gradient(90deg, #35c9c4, #6f66f2, #c062e0);
   --nav-bg: rgba(255, 252, 246, 0.9);
 }
-:root[data-theme='noche'] {
+:root[data-tema='noche'] {
   color-scheme: dark;
   --bg: #070a12;
   --surface: #0e1420;
@@ -60,7 +60,7 @@
   --ink: linear-gradient(90deg, #63e6e2, #8f86ff, #d48cf2);
   --nav-bg: rgba(9, 13, 23, 0.9);
 }
-:root[data-theme='tinta'] {
+:root[data-tema='tinta'] {
   color-scheme: dark;
   --bg: #0b0a1a;
   --surface: #14122b;
@@ -1092,6 +1092,16 @@ button.list-row {
 .splash.fade {
   opacity: 0;
   pointer-events: none;
+  transition-duration: 0.25s;
+}
+.shell.entrando {
+  animation: aparecer 0.45s ease-out 0.15s both;
+}
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 .splash .name {
   font-family: var(--serif);

@@ -7,6 +7,15 @@ export default defineConfig({
   base: './',
   plugins: [
     react(),
+    // Algunas librerías (tablas de codificación de pdf-lib/fontkit) llevan el carácter U+FFFD literal.
+    // Lo escapamos para que los archivos sean texto UTF-8 limpio; en cadenas JS es el mismo carácter.
+    {
+      name: 'escapar-u-fffd',
+      enforce: 'post' as const,
+      generateBundle(_: unknown, bundle: Record<string, { type: string; code?: string }>) {
+        for (const f of Object.values(bundle)) if (f.type === 'chunk' && f.code?.includes('\uFFFD')) f.code = f.code.replaceAll('\uFFFD', '\\uFFFD');
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: null, // lo registramos a mano en main.tsx

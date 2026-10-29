@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Route, Router, Switch, useLocation } from 'wouter';
 import { useHashLocation } from 'wouter/use-hash-location';
+import { memoryLocation } from 'wouter/memory-location';
 import { createPoem, seedIfNeeded } from './db/db';
 import { FeatherProvider, useFeather } from './components/Feather';
-import { Navigation } from './components/ui';
+import { ConfirmProvider, Navigation } from './components/ui';
 import { ToastCtx, useSettings, useToasts } from './lib/hooks';
 import { Home } from './screens/Home';
 import { EditorScreen } from './screens/Editor';
@@ -11,6 +12,9 @@ import { Books, BookDetail } from './screens/Books';
 import { Lienzo, LienzoPicker } from './screens/Lienzo';
 import { Ajustes } from './screens/Ajustes';
 import plumaImg from './assets/pluma.png';
+
+// Incrustada (p. ej. en un artefacto) el hash no es fiable: la navegación vive en memoria.
+const ubicacion = window.self !== window.top ? memoryLocation({ path: '/' }).hook : useHashLocation;
 
 const THEME_COLOR = { plata: '#f3f5f9', papel: '#f4efe4', noche: '#070a12', tinta: '#0b0a1a' } as const;
 
@@ -26,16 +30,18 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = settings.theme;
+    document.documentElement.dataset.tema = settings.theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[settings.theme]);
   }, [settings.theme]);
 
   return (
     <ToastCtx.Provider value={push}>
       <FeatherProvider animation={settings.animation}>
-        <Router hook={useHashLocation}>
-          <Shell ready={ready} />
-        </Router>
+        <ConfirmProvider>
+          <Router hook={ubicacion}>
+            <Shell ready={ready} />
+          </Router>
+        </ConfirmProvider>
         <div className="toasts" role="status" aria-live="polite">
           {items.map((t) => (
             <div key={t.id} className="toast">
@@ -89,7 +95,7 @@ function Shell({ ready }: { ready: boolean }) {
 
   return (
     <>
-      <div className="shell">
+      <div className={`shell ${splash !== 'on' ? 'entrando' : ''}`}>
         {ready && splash !== 'on' && (
           <Switch>
             <Route path="/" component={Home} />

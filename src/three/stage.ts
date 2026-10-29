@@ -142,7 +142,7 @@ export class FeatherStage {
     const H = innerHeight;
     const now = performance.now();
     if (now < this.celebrateUntil) {
-      const h = Math.min(220, H * 0.28);
+      const h = Math.min(170, H * 0.22);
       const desktop = W >= 1024;
       return { x: W - (desktop ? 120 : 70), y: H - h / 2 - (desktop ? 40 : 110), h, tilt: 0.45, opacity: 1 };
     }

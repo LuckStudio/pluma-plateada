@@ -1,7 +1,28 @@
+interface DescargasClaude {
+  save: (r: { filename: string; data: Blob }) => Promise<{ status: string }>;
+}
+const claude = (window as unknown as { claude?: { use: (n: string) => Promise<DescargasClaude | null> } }).claude;
+const incrustada = window.self !== window.top;
+
 // Entrega un archivo al usuario: compartir (móvil) o descargar.
+// Incrustada en claude.ai, la descarga pasa por la capacidad "downloads" del visor.
 export async function guardarArchivo(blob: Blob, nombre: string, opts: { compartir?: boolean } = {}) {
+  if (claude && incrustada) {
+    const downloads = await claude.use('downloads').catch(() => null);
+    if (downloads) {
+      // El visor solo admite extensiones conocidas: la copia .pluma viaja como .json.
+      const filename = nombre.replace(/\.pluma$/, '.pluma.json');
+      try {
+        await downloads.save({ filename, data: blob });
+        return 'descargado';
+      } catch (e) {
+        if ((e as { code?: string }).code === 'declined') return 'cancelado';
+        throw new Error((e as { message?: string }).message ?? 'No se pudo guardar el archivo');
+      }
+    }
+  }
   const file = new File([blob], nombre, { type: blob.type });
-  if (opts.compartir && navigator.canShare?.({ files: [file] })) {
+  if (opts.compartir && !incrustada && navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: nombre });
       return 'compartido';

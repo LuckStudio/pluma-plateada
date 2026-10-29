@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation } from 'wouter';
 import { Icon, type IconName } from './Icon';
 import plumin from '../assets/plumin.png';
@@ -17,7 +18,8 @@ export function Sheet({ open, onClose, title, children, label }: { open: boolean
     };
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  // En un portal: así la hoja queda por encima de la navegación fija.
+  return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={label ?? title} tabIndex={-1} ref={ref} onClick={(e) => e.stopPropagation()}>
         <div className="grabber" />
@@ -33,7 +35,8 @@ export function Sheet({ open, onClose, title, children, label }: { open: boolean
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -128,5 +131,45 @@ export function RimaTag({ letra }: { letra: string }) {
     <span className="rima" style={{ background: `var(--rima-${'abcdef'[idx]})` }} title={`Rima ${letra}`}>
       {letra}
     </span>
+  );
+}
+
+// Confirmación dentro de la app (los navegadores incrustados bloquean confirm()).
+interface PeticionConfirmar {
+  titulo: string;
+  texto: string;
+  accion: string;
+  resolver: (ok: boolean) => void;
+}
+const ConfirmCtx = createContext<(titulo: string, texto: string, accion?: string) => Promise<boolean>>(async () => false);
+export const useConfirmar = () => useContext(ConfirmCtx);
+
+export function ConfirmProvider({ children }: { children: ReactNode }) {
+  const [p, setP] = useState<PeticionConfirmar | null>(null);
+  const pedir = useCallback(
+    (titulo: string, texto: string, accion = 'Eliminar') => new Promise<boolean>((resolver) => setP({ titulo, texto, accion, resolver })),
+    [],
+  );
+  const cerrar = (ok: boolean) => {
+    p?.resolver(ok);
+    setP(null);
+  };
+  return (
+    <ConfirmCtx.Provider value={pedir}>
+      {children}
+      <Sheet open={!!p} onClose={() => cerrar(false)} title={p?.titulo}>
+        <p className="muted" style={{ marginTop: 0, lineHeight: 1.5 }}>
+          {p?.texto}
+        </p>
+        <div className="row" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
+          <button className="btn" onClick={() => cerrar(false)}>
+            Cancelar
+          </button>
+          <button className="btn primary" style={{ background: '#c2334a', borderColor: '#c2334a', color: '#fff' }} onClick={() => cerrar(true)}>
+            {p?.accion}
+          </button>
+        </div>
+      </Sheet>
+    </ConfirmCtx.Provider>
   );
 }
