@@ -3,7 +3,7 @@ Un editor de poemas dedicado a mi gran amigo, al que le encanta escribir, desarr
 
 ## Modelo 3D de la pluma
 
-La pluma se genera por código (`src/feather.js`), con parámetros editables (largo, ancho de cada vexilo, número de barbas, caída, plumón…).
+La pluma se genera por código (`src/feather.js`), con parámetros editables (largo, ancho de cada vexilo, caída, inclinación y número de barbas, cortes…). El detalle fino (barbas, bordes irregulares) va en una textura pintada por código, no en geometría.
 
 ```bash
 npm install

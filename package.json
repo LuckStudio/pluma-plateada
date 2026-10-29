@@ -25,5 +25,8 @@
   "dependencies": {
     "three": "^0.186.1",
     "vite": "^8.3.5"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^1.0.13"
   }
 }

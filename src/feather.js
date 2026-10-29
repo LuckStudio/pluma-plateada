@@ -1,17 +1,21 @@
 import * as THREE from 'three';
+import { paintVaneAtlas } from './featherTexture.js';
 
 export const defaultParams = {
   length: 3.2,
-  seed: 7,
-  rows: 72, // divisiones a lo largo del vexilo
-  cols: 6, // divisiones a lo ancho de cada vexilo
+  seed: 11,
+  rows: 90, // divisiones a lo largo del vexilo
+  cols: 8, // divisiones a lo ancho de cada vexilo
   widthRight: 0.15, // ancho máx. (fracción del largo)
   widthLeft: 0.108,
-  quillEnd: 0.16, // fin del cálamo
+  quillEnd: 0.17, // fin del cálamo
   droop: 0.5, // caída de los vexilos hacia atrás
-  sweep: 0.5, // inclinación de las barbas hacia la punta
-  notches: 2, // cortes estilizados en el vexilo derecho
-  down: 9, // filamentos de plumón
+  sweep: 1.0, // inclinación de las barbas hacia la punta
+  splits: 4, // separaciones naturales de barbas
+  textureSize: 1024,
+  textureBarbs: 300, // barbas dibujadas por vexilo
+  textureStrokes: 7000, // bárbulas (trazos finos)
+  makeCanvas: () => document.createElement('canvas'),
 };
 
 function mulberry32(a) {
@@ -45,14 +49,15 @@ function makeSpine(L) {
   );
 }
 
-// Silueta ovalada con punta fina: nace estrecha, se ensancha y se cierra en ojiva.
-const prof = (x) => Math.pow(x, 0.62) * Math.pow(1 - x, 0.55);
+// Silueta: ovalada, con punta redondeada. Cerca de la base conserva algo de ancho
+// (ahí las barbas son sueltas y la textura las deja sueltas/con huecos).
+const prof = (x) => Math.pow(x, 0.62) * Math.pow(1 - x, 0.5);
 const PROF_MAX = (() => {
   let m = 0;
   for (let i = 0; i <= 200; i++) m = Math.max(m, prof(i / 200));
   return m;
 })();
-const widthProfile = (x) => prof(x) / PROF_MAX;
+const widthProfile = (x) => prof(x) / PROF_MAX + 0.07 * (1 - smooth(0, 0.12, x));
 
 function frameAt(spine, s) {
   const T = spine.getTangentAt(s).normalize();
@@ -61,37 +66,12 @@ function frameAt(spine, s) {
   return { T, N, B };
 }
 
-function toGeometry(pos, colors, idx) {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  return g;
-}
-
 function buildVane(spine, p, side) {
   const { length: L, rows, cols, quillEnd, droop, sweep } = p;
   // side < 0 es el lado derecho visto de frente (N apunta a la izquierda).
   const wMax = (side < 0 ? p.widthRight : p.widthLeft) * L;
-
-  // Cortes estilizados: pequeñas hendiduras en el borde (solo lado derecho, inclinadas como las barbas).
-  const notchAt = side < 0 ? [0.36, 0.6, 0.8].slice(0, p.notches) : [];
-  const notchDip = (x, u) => {
-    let d = 0;
-    for (const n of notchAt) d = Math.max(d, Math.exp(-Math.pow((x - n - 0.05 * u) / 0.02, 2)));
-    return 1 - 0.42 * d * smooth(0.3, 1, u);
-  };
-
-  const C = {
-    deep: new THREE.Color('#2f3f78'),
-    mid: new THREE.Color('#6677b4'),
-    pearl: new THREE.Color('#dcd8ee'),
-    rose: new THREE.Color('#c79bbd'),
-  };
-  const col = new THREE.Color();
   const pos = [];
-  const colors = [];
+  const uv = [];
   const idx = [];
 
   for (let r = 0; r <= rows; r++) {
@@ -99,28 +79,20 @@ function buildVane(spine, p, side) {
     const s = quillEnd + x * (1 - quillEnd);
     const { T, N, B } = frameAt(spine, Math.min(s, 0.9999));
     const c = spine.getPointAt(Math.min(s, 0.9999));
-    const w = wMax * widthProfile(x);
+    // Ligera ondulación del borde, para que no sea una forma perfecta.
+    const w = wMax * widthProfile(x) * (1 + 0.025 * Math.sin(x * 9 + side * 1.7));
 
     for (let k = 0; k <= cols; k++) {
       const u = k / cols;
-      const reach = u * w * notchDip(x, u);
-      const along = reach * sweep * (1 - 0.7 * smooth(0.75, 1, x));
+      const reach = u * w;
+      const along = reach * sweep * (1 - 0.8 * smooth(0.7, 1, x));
       const down = -droop * (reach * reach) / (wMax + 1e-6) - 0.015 * L * u * Math.sin(Math.PI * x);
       pos.push(
         c.x + N.x * side * reach + T.x * along + B.x * down,
         c.y + N.y * side * reach + T.y * along + B.y * down,
         c.z + N.z * side * reach + T.z * along + B.z * down,
       );
-
-      // Degradado: índigo en la base -> periwinkle -> brillo perlado junto al raquis -> rosa en la punta.
-      col.copy(C.deep).lerp(C.mid, smooth(0.0, 0.55, x) * (1 - 0.35 * u) + 0.15);
-      const pearl = (1 - smooth(0, 0.85, u)) * smooth(0.12, 0.45, x) * (1 - smooth(0.78, 1, x) * 0.6);
-      col.lerp(C.pearl, pearl * (side < 0 ? 0.8 : 0.55));
-      col.lerp(C.deep, smooth(0.7, 1, u) * 0.3);
-      col.lerp(C.rose, smooth(0.74, 1, x) * 0.7);
-      // Rayado fino que sugiere las barbas sin añadir geometría.
-      const g = 1 + (r % 2 ? 0.035 : -0.035) * smooth(0.1, 0.5, u);
-      colors.push(Math.min(1, col.r * g), Math.min(1, col.g * g), Math.min(1, col.b * g));
+      uv.push(side < 0 ? 0.5 + 0.5 * u : 0.5 - 0.5 * u, x);
     }
   }
 
@@ -135,16 +107,22 @@ function buildVane(spine, p, side) {
       else idx.push(a, b, c2, b, d, c2);
     }
   }
-  return toGeometry(pos, colors, idx);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
 }
 
-// Raquis: tubo fino de 5 lados que se afina hacia la punta.
+// Cálamo + raquis: tubo que pasa de cálamo grueso y claro a raquis fino y rosado.
 function buildRachis(spine, p) {
   const L = p.length;
-  const segs = 40;
-  const radial = 5;
-  const pink = new THREE.Color('#e3a7c0');
-  const pale = new THREE.Color('#efe2ec');
+  const segs = 48;
+  const radial = 8;
+  const calamus = new THREE.Color('#efddd6');
+  const pink = new THREE.Color('#d9a9bf');
+  const pale = new THREE.Color('#ece0ea');
   const pos = [];
   const colors = [];
   const idx = [];
@@ -152,8 +130,8 @@ function buildRachis(spine, p) {
     const t = i / segs;
     const c = spine.getPointAt(t);
     const { N, B } = frameAt(spine, Math.min(t, 0.9999));
-    const rad = L * (0.0068 * (1 - t) + 0.0012);
-    const col = pink.clone().lerp(pale, smooth(0.15, 0.9, t) * 0.6);
+    const rad = L * (0.0042 * (1 - t) + 0.0011 + 0.0036 * (1 - smooth(0.1, 0.22, t)));
+    const col = pink.clone().lerp(pale, smooth(0.3, 1, t) * 0.4).lerp(calamus, 1 - smooth(0.1, 0.24, t));
     for (let j = 0; j < radial; j++) {
       const a = (j / radial) * Math.PI * 2;
       const ca = Math.cos(a) * rad;
@@ -169,45 +147,19 @@ function buildRachis(spine, p) {
       idx.push(a, a + radial, b, b, a + radial, b + radial);
     }
   }
-  return toGeometry(pos, colors, idx);
-}
+  // Tapa del extremo inferior del cálamo.
+  const c0 = spine.getPointAt(0);
+  const cap = pos.length / 3;
+  pos.push(c0.x, c0.y, c0.z);
+  colors.push(calamus.r, calamus.g, calamus.b);
+  for (let j = 0; j < radial; j++) idx.push(cap, (j + 1) % radial, j);
 
-// Plumón: pocas cintas curvas y afiladas, en lugar de cientos de filamentos.
-function buildDown(spine, p, rand) {
-  const L = p.length;
-  const segs = 4;
-  const pos = [];
-  const colors = [];
-  const idx = [];
-  const base = new THREE.Color('#cfd0ea');
-  const tip = new THREE.Color('#f6f3fb');
-  for (let i = 0; i < p.down; i++) {
-    const s0 = 0.06 + rand() * (p.quillEnd + 0.1 - 0.06);
-    const c = spine.getPointAt(s0);
-    const { T, N, B } = frameAt(spine, s0);
-    const side = i % 2 ? 1 : -1;
-    const len = L * (0.07 + rand() * 0.07);
-    const dir = new THREE.Vector3()
-      .addScaledVector(N, side * (0.7 + rand() * 0.5))
-      .addScaledVector(T, -0.15 + rand() * 0.5)
-      .addScaledVector(B, (rand() - 0.5) * 0.4)
-      .normalize();
-    const curl = new THREE.Vector3().addScaledVector(T, 0.9).addScaledVector(B, (rand() - 0.5) * 0.5);
-    const start = pos.length / 3;
-    for (let k = 0; k <= segs; k++) {
-      const t = k / segs;
-      const q = c.clone().addScaledVector(dir, len * t).addScaledVector(curl, len * 0.5 * t * t);
-      const hw = L * 0.0075 * (1 - t);
-      const col = base.clone().lerp(tip, t);
-      pos.push(q.x + B.x * hw, q.y + B.y * hw, q.z + B.z * hw, q.x - B.x * hw, q.y - B.y * hw, q.z - B.z * hw);
-      colors.push(col.r, col.g, col.b, col.r, col.g, col.b);
-    }
-    for (let k = 0; k < segs; k++) {
-      const a = start + k * 2;
-      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-    }
-  }
-  return toGeometry(pos, colors, idx);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
 }
 
 export function createFeather(overrides = {}) {
@@ -215,22 +167,28 @@ export function createFeather(overrides = {}) {
   const rand = mulberry32(p.seed);
   const spine = makeSpine(p.length);
 
+  const tex = new THREE.CanvasTexture(paintVaneAtlas(p.makeCanvas(), p, rand));
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = false; // convención glTF: v = 0 arriba
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+
   const vaneMat = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 0.38,
-    metalness: 0.12,
+    map: tex,
+    alphaTest: 0.5,
+    alphaToCoverage: true,
+    roughness: 0.55,
+    metalness: 0,
     side: THREE.DoubleSide,
   });
-  const rachisMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35 });
-  const downMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
+  const rachisMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4 });
 
   const group = new THREE.Group();
   group.name = 'Pluma';
   const parts = [
-    ['Vexilo_derecho', buildVane(spine, p, 1), vaneMat],
-    ['Vexilo_izquierdo', buildVane(spine, p, -1), vaneMat],
+    ['Vexilo_derecho', buildVane(spine, p, -1), vaneMat],
+    ['Vexilo_izquierdo', buildVane(spine, p, 1), vaneMat],
     ['Raquis', buildRachis(spine, p), rachisMat],
-    ['Plumon', buildDown(spine, p, rand), downMat],
   ];
   for (const [name, geo, mat] of parts) {
     const m = new THREE.Mesh(geo, mat);
@@ -238,7 +196,6 @@ export function createFeather(overrides = {}) {
     group.add(m);
   }
 
-  // Centrar para que rote sobre su centro.
   const center = new THREE.Box3().setFromObject(group).getCenter(new THREE.Vector3());
   group.children.forEach((m) => m.position.sub(center));
   return group;
