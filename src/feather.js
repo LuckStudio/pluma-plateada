@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { paintVaneAtlas } from './featherTexture.js';
+import { nibFrame, buildFerrule, buildNib, buildInk } from './nib.js';
 
 export const defaultParams = {
   length: 3.2,
@@ -8,7 +9,7 @@ export const defaultParams = {
   cols: 8, // divisiones a lo ancho de cada vexilo
   widthRight: 0.15, // ancho máx. (fracción del largo)
   widthLeft: 0.108,
-  quillEnd: 0.17, // fin del cálamo
+  quillEnd: 0.14, // fin del cálamo
   droop: 0.5, // caída de los vexilos hacia atrás
   sweep: 1.0, // inclinación de las barbas hacia la punta
   splits: 4, // separaciones naturales de barbas
@@ -120,9 +121,9 @@ function buildRachis(spine, p) {
   const L = p.length;
   const segs = 48;
   const radial = 8;
-  const calamus = new THREE.Color('#efddd6');
-  const pink = new THREE.Color('#d9a9bf');
-  const pale = new THREE.Color('#ece0ea');
+  const calamus = new THREE.Color('#e4e8ef');
+  const pink = new THREE.Color('#c3cad6');
+  const pale = new THREE.Color('#f1f4f9');
   const pos = [];
   const colors = [];
   const idx = [];
@@ -173,15 +174,62 @@ export function createFeather(overrides = {}) {
   tex.anisotropy = 8;
   tex.needsUpdate = true;
 
-  const vaneMat = new THREE.MeshStandardMaterial({
+  // Plata con reflejo cepillado a lo largo de las barbas (anisotropía en dirección u).
+  const vaneMat = new THREE.MeshPhysicalMaterial({
     map: tex,
     alphaTest: 0.5,
     alphaToCoverage: true,
-    roughness: 0.55,
-    metalness: 0,
+    metalness: 1,
+    roughness: 0.3,
+    anisotropy: 0.6,
     side: THREE.DoubleSide,
   });
-  const rachisMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4 });
+  const rachisMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 1, roughness: 0.22 });
+  const silver = new THREE.MeshStandardMaterial({
+    color: '#e9edf3',
+    metalness: 1,
+    roughness: 0.16,
+    side: THREE.DoubleSide,
+  });
+  // Tinta densa y holográfica: base azul tinta oscura con película iridiscente y barniz.
+  const inkMat = new THREE.MeshPhysicalMaterial({
+    name: 'Tinta_holografica',
+    color: '#6b74a8',
+    metalness: 1,
+    roughness: 0.28,
+    iridescence: 1,
+    iridescenceIOR: 1.4,
+    iridescenceThicknessRange: [150, 1300],
+    clearcoat: 1,
+    clearcoatRoughness: 0.04,
+    side: THREE.DoubleSide,
+  });
+
+  // Mapa de grosor de la película: ruido suave que reparte los colores holográficos.
+  const film = p.makeCanvas();
+  film.width = film.height = 128;
+  const fc = film.getContext('2d');
+  fc.fillStyle = '#808080';
+  fc.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 40; i++) {
+    const x = rand() * 128;
+    const y = rand() * 128;
+    const r = 12 + rand() * 40;
+    const v = Math.floor(rand() * 255);
+    const g = fc.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${v},${v},${v},0.8)`);
+    g.addColorStop(1, `rgba(${v},${v},${v},0)`);
+    fc.fillStyle = g;
+    fc.fillRect(0, 0, 128, 128);
+  }
+  const filmTex = new THREE.CanvasTexture(film);
+  filmTex.wrapS = filmTex.wrapT = THREE.RepeatWrapping;
+  filmTex.flipY = false;
+  inkMat.iridescenceThicknessMap = filmTex;
+
+  const f = nibFrame(spine);
+  const [nibA, nibB] = buildNib(f, p.length);
+  const [inkCoat, inkDrop] = buildInk(f, p.length, rand);
 
   const group = new THREE.Group();
   group.name = 'Pluma';
@@ -189,6 +237,11 @@ export function createFeather(overrides = {}) {
     ['Vexilo_derecho', buildVane(spine, p, -1), vaneMat],
     ['Vexilo_izquierdo', buildVane(spine, p, 1), vaneMat],
     ['Raquis', buildRachis(spine, p), rachisMat],
+    ['Virola', buildFerrule(f, p.length), silver],
+    ['Plumin_a', nibA, silver],
+    ['Plumin_b', nibB, silver],
+    ['Tinta', inkCoat, inkMat],
+    ['Gota_tinta', inkDrop, inkMat],
   ];
   for (const [name, geo, mat] of parts) {
     const m = new THREE.Mesh(geo, mat);

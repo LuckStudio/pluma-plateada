@@ -5,11 +5,12 @@ const smooth = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
+// Plata: el material es metálico, así que estos tonos actúan como color del reflejo.
 const C = {
-  deep: new THREE.Color('#3b4a84'),
-  mid: new THREE.Color('#7c89bd'),
-  pearl: new THREE.Color('#e2dfef'),
-  rose: new THREE.Color('#cfa5c3'),
+  deep: new THREE.Color('#7b8597'),
+  mid: new THREE.Color('#bcc3cf'),
+  pearl: new THREE.Color('#f6f8fc'),
+  ice: new THREE.Color('#cdd8ea'),
 };
 
 // Color del vexilo en (x: largo 0..1, u: ancho 0..1 desde el raquis).
@@ -18,7 +19,7 @@ function colorAt(x, u, side, out) {
   const pearl = (1 - smooth(0, 0.85, u)) * smooth(0.1, 0.45, x) * (1 - smooth(0.78, 1, x) * 0.6);
   out.lerp(C.pearl, pearl * (side < 0 ? 0.72 : 0.5));
   out.lerp(C.deep, smooth(0.7, 1, u) * 0.25);
-  out.lerp(C.rose, smooth(0.74, 1, x) * 0.6);
+  out.lerp(C.ice, smooth(0.74, 1, x) * 0.6);
   // Manchas suaves de baja frecuencia: la pluma real nunca es un degradado perfecto.
   const m = Math.sin(x * 7 + u * 3 + side) * 0.5 + Math.sin(x * 17 - u * 5 + side * 2) * 0.3;
   out.lerp(m > 0 ? C.pearl : C.deep, Math.abs(m) * 0.07);
