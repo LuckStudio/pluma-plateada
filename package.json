@@ -1,7 +1,7 @@
 {
   "name": "pluma-plateada",
   "version": "1.0.0",
-  "description": "Un editor de poemas dedicado a mi gran amigo, al que le encanta escribir, desarrollo para que pueda retomar su arte siempre que el quiera",
+  "description": "Cuaderno de poesía para el móvil: escribe, mide tus versos en castellano, crea poemarios en PDF y ePub y compártelos como imagen o vídeo.",
   "main": "index.js",
   "scripts": {
     "test": "vitest run",
@@ -15,13 +15,20 @@
     "type": "git",
     "url": "git+https://github.com/LuckStudio/pluma-plateada.git"
   },
-  "keywords": [],
+  "keywords": [
+    "poesía",
+    "métrica",
+    "pwa",
+    "editor",
+    "poemas",
+    "react"
+  ],
   "author": "",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/LuckStudio/pluma-plateada/issues"
   },
-  "homepage": "https://github.com/LuckStudio/pluma-plateada#readme",
+  "homepage": "https://luckstudio.github.io/pluma-plateada/",
   "type": "module",
   "private": "true",
   "dependencies": {
