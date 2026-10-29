@@ -156,6 +156,9 @@ export function Ajustes() {
           </button>
         ))}
       </div>
+      <div style={{ marginTop: 8 }}>
+        <Toggle label="Pantalla de bienvenida al abrir" hint="La pluma y una invitación a escribir antes de entrar" checked={s.showIntro} onChange={(showIntro) => set({ showIntro })} />
+      </div>
       <div className="row wrap" style={{ justifyContent: 'space-between', marginTop: 16 }}>
         <span>Animación de la pluma</span>
         <Seg

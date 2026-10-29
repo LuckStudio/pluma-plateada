@@ -1,4 +1,4 @@
-// Exporta la animación de escritura a vídeo.
+// Exporta la animación del poema (versos que aparecen con fundido) a vídeo.
 // 1) WebCodecs + MP4 (rápido, H.264): Chrome, Edge, Android, Safari 16.4+.
 // 2) Si no hay codificador, graba el canvas en tiempo real con MediaRecorder.
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
@@ -47,7 +47,7 @@ export async function exportarVideo(o: LienzoOpts, v: VideoOpts, onProgress: (p:
   const ctx = canvas.getContext('2d', { alpha: false })!;
   // Maquetamos a tamaño completo y escalamos el dibujo.
   ctx.scale(s, s);
-  const m = maquetar(ctx, o, f.w, f.h, 0, v.velocidad);
+  const m = maquetar(ctx, o, f.w, f.h, 0);
   const total = duracionVideo(m, v);
   const frames = Math.ceil(total * FPS);
 

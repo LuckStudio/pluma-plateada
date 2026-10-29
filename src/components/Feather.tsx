@@ -7,7 +7,7 @@ interface FeatherApi {
   setMode: (m: FeatherMode) => void;
   setAnchor: (r: DOMRect | null) => void;
   celebrate: () => void;
-  transition: () => void;
+  zoomThrough: (ms?: number) => void;
 }
 
 const Ctx = createContext<FeatherApi>({
@@ -15,7 +15,7 @@ const Ctx = createContext<FeatherApi>({
   setMode: () => {},
   setAnchor: () => {},
   celebrate: () => {},
-  transition: () => {},
+  zoomThrough: () => {},
 });
 
 export const useFeather = () => useContext(Ctx);
@@ -38,6 +38,7 @@ export function FeatherProvider({ animation, children }: { animation: 'completa'
         st.reduced = animation === 'suave' || matchMedia('(prefers-reduced-motion: reduce)').matches;
         st.setMode(pending.current.mode, pending.current.anchor);
         stageRef.current = st;
+        if (import.meta.env.DEV) (window as unknown as { __stage: FeatherStage }).__stage = st;
       } catch {
         /* sin WebGL: la interfaz sigue funcionando sin la pluma 3D */
       }
@@ -62,14 +63,11 @@ export function FeatherProvider({ animation, children }: { animation: 'completa'
       },
       celebrate: () => {
         stageRef.current?.celebrate();
-        if (enabled) drawInk(inkRef.current, 'drop');
+        if (enabled) drawInk(inkRef.current);
       },
-      transition: () => {
-        stageRef.current?.transition();
-        if (animation === 'completa') drawInk(inkRef.current, 'stroke');
-      },
+      zoomThrough: (ms) => stageRef.current?.zoomThrough(ms),
     }),
-    [enabled, animation],
+    [enabled],
   );
 
   return (
@@ -96,7 +94,12 @@ export function FeatherSlot({ className, style, mode = 'home' }: { className?: s
     addEventListener('resize', update);
     const ro = new ResizeObserver(update);
     if (ref.current) ro.observe(ref.current);
+    // Las animaciones de entrada mueven el hueco sin cambiar su tamaño: volvemos a medir al acabar.
+    const t1 = setTimeout(update, 450);
+    const t2 = setTimeout(update, 1400);
     return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
       removeEventListener('scroll', update);
       removeEventListener('resize', update);
       ro.disconnect();
@@ -111,9 +114,9 @@ export function FeatherSlot({ className, style, mode = 'home' }: { className?: s
   );
 }
 
-// Trazo de tinta holográfica que cruza la pantalla, o gota al celebrar.
-function drawInk(canvas: HTMLCanvasElement | null, kind: 'stroke' | 'drop') {
-  if (!canvas) return;
+// Onda suave alrededor de la pluma al celebrar.
+function drawInk(canvas: HTMLCanvasElement | null) {
+  if (!canvas || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const dpr = Math.min(devicePixelRatio, 2);
   const W = innerWidth;
   const H = innerHeight;
@@ -123,43 +126,17 @@ function drawInk(canvas: HTMLCanvasElement | null, kind: 'stroke' | 'drop') {
   if (!ctx) return;
   ctx.scale(dpr, dpr);
   const start = performance.now();
-  const dur = kind === 'stroke' ? 650 : 900;
-  const grad = ctx.createLinearGradient(0, H, W, 0);
-  grad.addColorStop(0, 'rgba(99,230,226,0.9)');
-  grad.addColorStop(0.5, 'rgba(143,134,255,0.9)');
-  grad.addColorStop(1, 'rgba(212,140,242,0.9)');
+  const desktop = W >= 1024;
+  const x = W - (desktop ? 120 : 70);
+  const y = H - (desktop ? 60 : 120);
   const tick = (now: number) => {
-    const t = Math.min(1, (now - start) / dur);
+    const t = Math.min(1, (now - start) / 900);
     ctx.clearRect(0, 0, W, H);
-    if (kind === 'stroke') {
-      const grow = Math.min(1, t / 0.6);
-      const fade = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
-      ctx.globalAlpha = fade;
-      ctx.strokeStyle = grad;
-      ctx.lineCap = 'round';
-      ctx.lineWidth = Math.max(3, Math.min(W, H) * 0.012);
-      ctx.beginPath();
-      const steps = 40;
-      for (let i = 0; i <= steps * grow; i++) {
-        const u = i / steps;
-        const x = -20 + u * (W + 40);
-        const y = H * 0.78 - u * H * 0.5 + Math.sin(u * Math.PI * 2.2) * H * 0.06;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    } else {
-      const desktop = W >= 1024;
-      const x = W - (desktop ? 120 : 70);
-      const y = H - (desktop ? 60 : 120);
-      const r = 6 + t * Math.min(W, H) * 0.12;
-      ctx.globalAlpha = (1 - t) * 0.8;
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = grad;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 20 + t * 140);
+    g.addColorStop(0, `rgba(205,216,234,${0.35 * (1 - t)})`);
+    g.addColorStop(1, 'rgba(205,216,234,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
     if (t < 1) requestAnimationFrame(tick);
     else ctx.clearRect(0, 0, W, H);
   };

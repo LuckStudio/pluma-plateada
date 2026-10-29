@@ -19,6 +19,7 @@
   --overlay: rgba(17, 23, 34, 0.35);
   --ink: linear-gradient(90deg, #35c9c4, #6f66f2, #c062e0);
   --nav-bg: rgba(255, 255, 255, 0.86);
+  --glow: rgba(150, 168, 205, 0.32);
 }
 :root[data-tema='papel'] {
   color-scheme: light;
@@ -39,6 +40,7 @@
   --overlay: rgba(31, 27, 22, 0.35);
   --ink: linear-gradient(90deg, #35c9c4, #6f66f2, #c062e0);
   --nav-bg: rgba(255, 252, 246, 0.9);
+  --glow: rgba(190, 160, 120, 0.25);
 }
 :root[data-tema='noche'] {
   color-scheme: dark;
@@ -59,6 +61,7 @@
   --overlay: rgba(2, 4, 8, 0.6);
   --ink: linear-gradient(90deg, #63e6e2, #8f86ff, #d48cf2);
   --nav-bg: rgba(9, 13, 23, 0.9);
+  --glow: rgba(70, 100, 170, 0.35);
 }
 :root[data-tema='tinta'] {
   color-scheme: dark;
@@ -79,6 +82,7 @@
   --overlay: rgba(4, 3, 12, 0.6);
   --ink: linear-gradient(90deg, #63e6e2, #8f86ff, #d48cf2);
   --nav-bg: rgba(14, 12, 32, 0.9);
+  --glow: rgba(143, 134, 255, 0.3);
 }
 
 /* Colores de rima: pastel con texto oscuro, legibles en todos los temas. */
@@ -162,15 +166,21 @@ a {
 }
 
 /* ───────── Estructura ───────── */
+/* Un canvas no se estira con inset: necesita ancho y alto explícitos (si no, en pantallas de
+   alta densidad mide el doble o el triple que la pantalla). */
 .feather-layer {
   position: fixed;
   inset: 0;
+  width: 100%;
+  height: 100%;
   z-index: 0;
   pointer-events: none;
 }
 .ink-layer {
   position: fixed;
   inset: 0;
+  width: 100%;
+  height: 100%;
   z-index: 40;
   pointer-events: none;
 }
@@ -523,7 +533,7 @@ a.card {
   background: var(--surface);
   color: var(--text);
   padding: 10px 12px;
-  font-size: 15px;
+  font-size: 16px;
   width: 100%;
 }
 .textarea {
@@ -1075,65 +1085,168 @@ button.list-row {
   cursor: grab;
 }
 
-/* ───────── Splash ───────── */
-.splash {
+/* ───────── Bienvenida ───────── */
+.intro {
   position: fixed;
   inset: 0;
   z-index: 70;
+}
+.intro-glow {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(60% 42% at 50% 34%, var(--glow), transparent 72%);
+  transition: opacity 0.8s ease;
+}
+.intro.saliendo .intro-glow {
+  opacity: 0;
+}
+.intro-static {
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  height: 50%;
+  transform: translateX(-50%) rotate(16deg);
+}
+.intro-hit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0 max(24px, env(safe-area-inset-left, 0px)) calc(56px + var(--safe-b));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+}
+.intro-hit:focus-visible {
+  outline: none;
+}
+.intro-text {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  padding-bottom: calc(72px + var(--safe-b));
-  gap: 14px;
-  background: transparent;
-  transition: opacity 0.5s ease;
+  gap: 18px;
+  max-width: 520px;
 }
-.splash.fade {
+.intro-fecha {
+  animation: entra 0.8s ease-out 0.2s both;
+}
+.intro-frase {
+  font-size: clamp(38px, 11vw, 64px);
+  font-weight: 500;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+.intro-word {
+  display: inline-block;
+  margin: 0 0.12em;
+  animation: palabraEntra 1s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i) * 90ms + 300ms);
+}
+.intro-hint {
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-2);
   opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.intro-hint.on {
+  opacity: 1;
+  animation: latido 2.4s ease-in-out 0.6s infinite;
+}
+.intro-flash {
+  position: fixed;
+  inset: 0;
   pointer-events: none;
-  transition-duration: 0.25s;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 36%, rgba(255, 255, 255, 0.95), rgba(226, 233, 245, 0.55) 28%, rgba(255, 255, 255, 0) 62%);
 }
-.shell.entrando {
-  animation: aparecer 0.45s ease-out 0.15s both;
+.intro.saliendo {
+  pointer-events: none;
 }
-@keyframes aparecer {
+.intro.saliendo .intro-word {
+  animation: palabraSale 0.75s cubic-bezier(0.6, 0, 0.3, 1) both;
+  animation-delay: calc(var(--i) * 45ms);
+}
+.intro.saliendo .intro-fecha,
+.intro.saliendo .intro-hint {
+  animation: sale 0.4s ease-in both;
+}
+.intro.saliendo .intro-flash {
+  animation: destello 1.1s ease-out 0.22s both;
+}
+.intro.saliendo {
+  animation: retira 0.4s ease-in 1s both;
+}
+/* backwards (no both): al terminar no debe quedar ninguna transformación aplicada, porque
+   convertiría el contenedor en la referencia de los elementos fijos (dock, botones flotantes). */
+.shell.revelar {
+  animation: revelar 1.05s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s backwards;
+}
+.ruta {
+  animation: entra 0.38s ease-out backwards;
+}
+@keyframes entra {
   from {
     opacity: 0;
     transform: translateY(8px);
   }
 }
-.splash .name {
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 40px;
-}
-.splash .bar {
-  width: 120px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--surface-3);
-  overflow: hidden;
-}
-.splash .bar div {
-  height: 100%;
-  width: 40%;
-  background: var(--ink);
-  animation: load 1.2s ease-in-out infinite;
-}
-@keyframes load {
-  from {
-    transform: translateX(-100%);
-  }
+@keyframes sale {
   to {
-    transform: translateX(260%);
+    opacity: 0;
   }
 }
-.splash-feather-static {
-  position: absolute;
-  top: 12%;
-  height: 52%;
-  transform: rotate(14deg);
+@keyframes retira {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+@keyframes palabraEntra {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+    filter: blur(8px);
+  }
+}
+@keyframes palabraSale {
+  to {
+    opacity: 0;
+    transform: translateY(-70px) scale(1.06);
+    filter: blur(12px);
+    letter-spacing: 0.08em;
+  }
+}
+@keyframes destello {
+  0% {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+@keyframes revelar {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+    filter: blur(14px);
+  }
+}
+@keyframes latido {
+  50% {
+    opacity: 0.45;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1143,4 +1256,396 @@ button.list-row {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ───────── Dock del editor (móvil) ───────── */
+.dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--kb, 0px);
+  z-index: 25;
+  background: var(--nav-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--line);
+  padding: 0 max(0px, env(safe-area-inset-right, 0px)) var(--safe-b) max(0px, env(safe-area-inset-left, 0px));
+  box-shadow: 0 -8px 24px rgba(17, 23, 34, 0.06);
+}
+html.teclado .dock {
+  padding-bottom: 0;
+}
+.dock-panel {
+  background: var(--surface);
+  max-height: min(44dvh, 420px);
+  overflow: auto;
+  padding: 2px 16px 14px;
+  border-bottom: 1px solid var(--line);
+  overscroll-behavior: contain;
+  animation: rise 0.2s ease-out;
+}
+html.teclado .dock-panel {
+  max-height: 30dvh;
+}
+.dock-strip {
+  width: 100%;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.dock-strip b {
+  font-size: 15px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.dock-tools {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px 8px 0;
+}
+.dock-tools::-webkit-scrollbar {
+  display: none;
+}
+.dock-groups {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px 8px 6px;
+}
+.dock-groups button {
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.dock-groups button[aria-selected='true'] {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+.tool .glifo {
+  font-family: var(--serif);
+  font-size: 20px;
+  line-height: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  color: var(--text);
+}
+.tool-sep {
+  flex: 0 0 1px;
+  width: 1px;
+  margin: 10px 4px;
+  background: var(--line-strong);
+}
+.analisis.compacto .tabs button {
+  height: 32px;
+  font-size: 12px;
+}
+.chip.info {
+  cursor: default;
+}
+.titulo-poema {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 21px;
+  font-weight: 600;
+  padding: 0;
+  outline: none;
+  width: 100%;
+  text-overflow: ellipsis;
+}
+.zen-salir {
+  position: fixed;
+  top: calc(10px + var(--safe-t));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  z-index: 30;
+  opacity: 0.55;
+  background: var(--surface);
+}
+.zen-salir:hover,
+.zen-salir:focus-visible {
+  opacity: 1;
+}
+.editor-screen.zen {
+  padding-top: calc(56px + var(--safe-t));
+}
+html.con-dock .toasts {
+  bottom: calc(150px + var(--kb, 0px) + var(--safe-b));
+}
+
+/* ───────── Biblioteca ───────── */
+.buscador {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 6px 0 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--text-3);
+}
+.buscador:focus-within {
+  border-color: var(--focus);
+}
+.buscador input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 16px;
+  color: var(--text);
+}
+.buscador input::-webkit-search-cancel-button {
+  display: none;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.tag.libro {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+}
+.estado-pill {
+  flex: none;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  border: 1px dashed var(--line-strong);
+  color: var(--text-3);
+}
+.grupo-titulo {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  padding: 10px 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+.flip {
+  transform: rotate(180deg);
+}
+
+/* ───────── Lienzo: vista previa fija y estilos ───────── */
+.lienzo-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (max-width: 1023px) {
+  .lienzo-preview {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    margin: 0 -20px;
+    padding: calc(6px + var(--safe-t)) 20px 10px;
+    background: var(--bg);
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s ease;
+  }
+  .lienzo-preview.compacta {
+    border-bottom-color: var(--line);
+    box-shadow: 0 10px 20px -16px rgba(17, 23, 34, 0.35);
+  }
+  .lienzo-preview .canvas-stage {
+    height: min(48dvh, 460px);
+    transition: height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), padding 0.28s ease;
+  }
+  .lienzo-preview.compacta .canvas-stage {
+    height: 26dvh;
+    padding: 8px;
+  }
+}
+.estilo {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--text-2);
+}
+.estilo-muestra {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--serif);
+  font-size: 24px;
+  font-style: italic;
+  font-weight: 500;
+  box-shadow: inset 0 0 0 3px transparent;
+}
+.estilo[aria-pressed='true'] .estilo-muestra {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--primary);
+}
+.estilo-nombre {
+  font-size: 12px;
+  font-weight: 500;
+}
+.estilo[aria-pressed='true'] .estilo-nombre {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ───────── Libros ───────── */
+.libros-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 22px 16px;
+}
+.libro-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-decoration: none;
+  color: inherit;
+}
+.portada {
+  display: block;
+  max-width: 100%;
+  height: auto !important;
+  border-radius: 3px 8px 8px 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 12px 28px rgba(17, 23, 34, 0.22);
+  background: var(--surface-2);
+}
+.libros-grid .portada {
+  width: 100% !important;
+  aspect-ratio: 148 / 210;
+}
+.portada-boton {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+.cubierta-layout {
+  display: grid;
+  gap: 22px;
+}
+@media (min-width: 760px) {
+  .cubierta-layout {
+    grid-template-columns: 250px minmax(0, 1fr);
+    align-items: start;
+  }
+  .cubierta-previa {
+    position: sticky;
+    top: 16px;
+  }
+}
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.creditos-previa {
+  box-shadow: none;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.creditos-previa p {
+  margin: 0;
+}
+
+/* ───────── Vista previa del libro ───────── */
+.vista-libro {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+}
+.vista-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(8px + var(--safe-t)) max(12px, env(safe-area-inset-right, 0px)) 8px max(8px, env(safe-area-inset-left, 0px));
+  background: var(--nav-bg);
+  border-bottom: 1px solid var(--line);
+}
+.vista-pista {
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.vista-pista::-webkit-scrollbar {
+  display: none;
+}
+.vista-pliego {
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+}
+.vista-hojas {
+  --alto: calc(100dvh - 190px - var(--safe-t) - var(--safe-b));
+  display: grid;
+  grid-template-columns: repeat(var(--n), auto);
+  gap: 0;
+  box-shadow: 0 18px 40px rgba(17, 23, 34, 0.25);
+}
+.vista-hoja {
+  display: block;
+  height: min(var(--alto), calc((100vw - 32px) / var(--n) * var(--ratio)));
+  aspect-ratio: 1 / var(--ratio);
+  background: #fffdf9;
+}
+.vista-hoja.vacia {
+  background: transparent;
+}
+.vista-hojas .vista-hoja:first-child:not(:last-child) {
+  box-shadow: inset -14px 0 18px -14px rgba(0, 0, 0, 0.18);
+}
+.vista-pie {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 16px calc(12px + var(--safe-b));
+  background: var(--nav-bg);
+  border-top: 1px solid var(--line);
 }

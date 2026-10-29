@@ -35,6 +35,52 @@ export interface BookLayout {
   newPagePerPoem: boolean;
   partPages: boolean;
   pageNumbers: boolean;
+  runningHeads?: boolean; // título del libro y de la parte en la cabecera
+  poemAlign?: 'izquierda' | 'bloque'; // bloque: el poema se centra como bloque en la página
+  titleCase?: 'normal' | 'versalitas';
+  ornament?: boolean; // filete bajo el título de cada poema
+  includeCover?: boolean; // cubierta y contracubierta dentro del PDF
+  folio?: 'centro' | 'exterior';
+}
+
+export type CoverStyle = 'plata' | 'papel' | 'noche' | 'tinta' | 'color' | 'imagen';
+
+export interface BookCover {
+  style: CoverStyle;
+  color: string;
+  image: string; // data URL (JPEG) cuando style = imagen
+  layout: 'arriba' | 'centrado' | 'abajo';
+  font: 'cormorant' | 'caveat' | 'dancing' | 'inter';
+  feather: boolean;
+}
+
+export interface BookBack {
+  blurb: string; // sinopsis de contracubierta
+  bio: string;
+  barcode: boolean; // reserva hueco para el código de barras
+}
+
+export type Licencia = 'reservados' | 'cc-by' | 'cc-by-sa' | 'cc-by-nc' | 'cc-by-nc-nd';
+
+export interface BookLegal {
+  year: string;
+  edition: string;
+  publisher: string;
+  isbn: string;
+  deposito: string;
+  coverDesign: string;
+  printedIn: string;
+  rights: Licencia;
+  extra: string;
+}
+
+export interface BookExtras {
+  epigraph: string;
+  epigraphAuthor: string;
+  prologue: string;
+  acknowledgements: string;
+  aboutAuthor: string;
+  colophon: string;
 }
 
 export interface Book {
@@ -45,8 +91,32 @@ export interface Book {
   dedication: string;
   parts: BookPart[];
   layout: BookLayout;
+  cover?: BookCover;
+  back?: BookBack;
+  legal?: BookLegal;
+  extras?: BookExtras;
   createdAt: number;
   updatedAt: number;
+}
+
+export type LibroCompleto = Book & {
+  layout: Required<BookLayout>;
+  cover: BookCover;
+  back: BookBack;
+  legal: BookLegal;
+  extras: BookExtras;
+};
+
+// Rellena los campos que los libros antiguos aún no tienen.
+export function libroCompleto(b: Book): LibroCompleto {
+  return {
+    ...b,
+    layout: { ...DEFAULT_LAYOUT, ...b.layout },
+    cover: { ...DEFAULT_COVER, ...b.cover },
+    back: { ...DEFAULT_BACK, ...b.back },
+    legal: { ...DEFAULT_LEGAL, year: String(new Date(b.createdAt).getFullYear()), ...b.legal },
+    extras: { ...DEFAULT_EXTRAS, ...b.extras },
+  };
 }
 
 export interface Idea {
@@ -67,6 +137,7 @@ export interface Settings {
   showMetrics: boolean;
   author: string;
   seeded: boolean;
+  showIntro: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -79,9 +150,10 @@ export const DEFAULT_SETTINGS: Settings = {
   showMetrics: true,
   author: '',
   seeded: false,
+  showIntro: true,
 };
 
-export const DEFAULT_LAYOUT: BookLayout = {
+export const DEFAULT_LAYOUT: Required<BookLayout> = {
   page: 'a5',
   fontSize: 12,
   margins: 'normal',
@@ -89,7 +161,28 @@ export const DEFAULT_LAYOUT: BookLayout = {
   newPagePerPoem: true,
   partPages: true,
   pageNumbers: true,
+  runningHeads: true,
+  poemAlign: 'bloque',
+  titleCase: 'normal',
+  ornament: true,
+  includeCover: true,
+  folio: 'centro',
 };
+
+export const DEFAULT_COVER: BookCover = { style: 'plata', color: '#1d2a47', image: '', layout: 'centrado', font: 'cormorant', feather: true };
+export const DEFAULT_BACK: BookBack = { blurb: '', bio: '', barcode: true };
+export const DEFAULT_LEGAL: BookLegal = {
+  year: String(new Date().getFullYear()),
+  edition: 'Primera edición',
+  publisher: '',
+  isbn: '',
+  deposito: '',
+  coverDesign: '',
+  printedIn: '',
+  rights: 'reservados',
+  extra: '',
+};
+export const DEFAULT_EXTRAS: BookExtras = { epigraph: '', epigraphAuthor: '', prologue: '', acknowledgements: '', aboutAuthor: '', colophon: '' };
 
 class PlumaDB extends Dexie {
   poems!: Table<Poem, string>;
@@ -225,4 +318,13 @@ export function poemTitle(p: Pick<Poem, 'title' | 'text'>) {
   if (p.title.trim()) return p.title.trim();
   const first = p.text.split('\n').find((l) => l.trim());
   return first ? first.trim().replace(/[.,;:]+$/, '') : 'Sin título';
+}
+
+// Actualiza un libro a partir de su versión más reciente (evita pisar cambios de otros campos).
+export async function patchLibro(id: string, fn: (b: LibroCompleto) => Partial<Book>) {
+  await db.transaction('rw', db.books, async () => {
+    const b = await db.books.get(id);
+    if (!b) return;
+    await db.books.put({ ...b, ...fn(libroCompleto(b)), updatedAt: Date.now() });
+  });
 }

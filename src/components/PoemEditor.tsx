@@ -10,6 +10,7 @@ export interface Caret {
 export interface PoemEditorHandle {
   focus: () => void;
   insertar: (texto: string) => void;
+  insertarPar: (abre: string, cierra: string) => void;
   reemplazarPalabra: (palabra: string) => void;
   nuevaEstrofa: () => void;
   sangria: () => void;
@@ -81,6 +82,14 @@ export const PoemEditor = forwardRef<PoemEditorHandle, Props>(function PoemEdito
     insertar: (t) => {
       const el = ta.current!;
       escribir(t, el.selectionStart, el.selectionEnd);
+    },
+    insertarPar: (abre, cierra) => {
+      const el = ta.current!;
+      const [a, b] = [el.selectionStart, el.selectionEnd];
+      const dentro = el.value.slice(a, b);
+      escribir(abre + dentro + cierra, a, b);
+      const pos = a + abre.length + dentro.length;
+      el.setSelectionRange(pos, pos);
     },
     reemplazarPalabra: (p) => {
       const el = ta.current!;

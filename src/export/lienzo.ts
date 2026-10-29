@@ -5,8 +5,8 @@ import plumaUrl from '../assets/pluma.png';
 export type FormatId = '3:4' | '1:1' | '4:5' | '9:16' | '16:9' | 'postal' | 'marca' | 'a5' | 'a4';
 export type StyleId = 'plata' | 'papel' | 'noche' | 'tinta' | 'imagen';
 export type FontId = 'cormorant' | 'caveat' | 'dancing' | 'inter';
-export type Transicion = 'fundido' | 'tinta' | 'deslizar' | 'ninguna';
-export type Velocidad = 'lenta' | 'normal' | 'rapida';
+export type Animacion = 'fundido' | 'ascenso' | 'palabras';
+export type Ritmo = 'tranquilo' | 'normal' | 'rapido';
 
 export interface Formato {
   id: FormatId;
@@ -57,8 +57,8 @@ interface Paleta {
 export const ESTILOS: Record<StyleId, Paleta> = {
   plata: { label: 'Plata', text: '#101623', muted: '#3b4558', base: '#eef1f6', feather: 0.42 },
   papel: { label: 'Papel', text: '#1d1a15', muted: '#5b5348', base: '#f2eee5', feather: 0.3 },
-  noche: { label: 'Noche', text: '#eef1f7', muted: '#a3acbd', base: '#070a12', feather: 0.75 },
-  tinta: { label: 'Tinta', text: '#f3f1ff', muted: '#bdb7e6', base: '#0b0a1a', feather: 0.6 },
+  noche: { label: 'Noche', text: '#f3f5fa', muted: '#b9c3d8', base: '#070a12', feather: 0.8 },
+  tinta: { label: 'Tinta', text: '#f8f6ff', muted: '#d2ccf5', base: '#0b0a1a', feather: 0.7 },
   imagen: { label: 'Tu imagen', text: '#ffffff', muted: 'rgba(255,255,255,0.8)', base: '#000000', feather: 0.5 },
 };
 
@@ -77,14 +77,13 @@ export interface LienzoOpts {
 }
 
 export interface VideoOpts {
-  entrada: Transicion;
-  salida: Transicion;
-  velocidad: Velocidad;
-  pluma: boolean;
-  pausa: number; // segundos con el texto completo antes de salir
+  animacion: Animacion; // cómo aparece cada verso
+  ritmo: Ritmo;
+  salida: 'fundido' | 'ninguna';
+  pausa: number; // segundos con el poema completo antes de salir
 }
 
-export const DEFAULT_VIDEO: VideoOpts = { entrada: 'tinta', salida: 'fundido', velocidad: 'normal', pluma: true, pausa: 2.5 };
+export const DEFAULT_VIDEO: VideoOpts = { animacion: 'ascenso', ritmo: 'normal', salida: 'fundido', pausa: 2.5 };
 
 // ───────── Recursos ─────────
 
@@ -139,10 +138,8 @@ interface LineaMaq {
   x: number; // borde izquierdo
   y: number; // línea base
   w: number;
-  cum: number[]; // anchura acumulada por carácter
-  t0: number; // tiempos de escritura (s, relativos al inicio de la escritura)
-  t1: number;
-  times: number[]; // fin de cada carácter
+  palabras: { text: string; x: number }[]; // para la animación palabra a palabra
+  estrofa: number;
 }
 
 export interface Maqueta {
@@ -155,10 +152,7 @@ export interface Maqueta {
   title?: { text: string; x: number; y: number; font: string };
   sign?: { text: string; x: number; y: number; font: string };
   paleta: Paleta;
-  escritura: number; // duración total de la escritura (s)
 }
-
-const VELOCIDAD: Record<Velocidad, number> = { lenta: 9, normal: 15, rapida: 24 };
 
 function fuenteCss(font: FontId, size: number) {
   const f = FUENTES[font];
@@ -181,7 +175,7 @@ function partir(ctx: CanvasRenderingContext2D, texto: string, maxW: number): str
   return out;
 }
 
-export function maquetar(ctx: CanvasRenderingContext2D, o: LienzoOpts, W: number, H: number, bleed = 0, velocidad: Velocidad = 'normal'): Maqueta {
+export function maquetar(ctx: CanvasRenderingContext2D, o: LienzoOpts, W: number, H: number, bleed = 0): Maqueta {
   const paleta = ESTILOS[o.style];
   const pad = Math.round(Math.min(W - 2 * bleed, H - 2 * bleed) * 0.1) + bleed;
   const maxW = W - 2 * pad;
@@ -200,17 +194,19 @@ export function maquetar(ctx: CanvasRenderingContext2D, o: LienzoOpts, W: number
     ctx.font = fuenteCss(o.font, size);
     const lineH = size * (o.font === 'inter' ? 1.5 : 1.38);
     const gap = lineH * 0.55;
-    const filas: { text: string; gapBefore: number; indent: number }[] = [];
+    const filas: { text: string; gapBefore: number; indent: number; estrofa: number }[] = [];
     let pendienteGap = 0;
+    let estrofa = 0;
     versos.forEach((v) => {
       if (!v.trim()) {
+        if (!pendienteGap) estrofa++;
         pendienteGap = gap;
         return;
       }
-      const sangria = (v.match(/^[\s ]+/)?.[0].length ?? 0) * size * 0.5;
+      const sangria = (v.match(/^[\s\u2003]+/)?.[0].length ?? 0) * size * 0.5;
       const partes = partir(ctx, v.trim(), maxW - sangria);
       partes.forEach((p, i) => {
-        filas.push({ text: p, gapBefore: i === 0 ? pendienteGap : 0, indent: sangria + (i > 0 && o.align === 'left' ? size * 0.9 : 0) });
+        filas.push({ text: p, gapBefore: i === 0 ? pendienteGap : 0, indent: sangria + (i > 0 && o.align === 'left' ? size * 0.9 : 0), estrofa });
         pendienteGap = 0;
       });
     });
@@ -227,57 +223,51 @@ export function maquetar(ctx: CanvasRenderingContext2D, o: LienzoOpts, W: number
     }
 
     let y = (H - total) / 2 - H * 0.015;
-    const res: Maqueta = { W, H, font: ctx.font, size, lineH, lineas: [], paleta, escritura: 0 };
+    const res: Maqueta = { W, H, font: ctx.font, size, lineH, lineas: [], paleta };
     if (titleH) {
       const font = `600 ${titleSize}px Inter, sans-serif`;
       res.title = { text: o.title.toUpperCase(), x: o.align === 'center' ? W / 2 : pad, y: y + titleSize, font };
       y += titleH;
     }
-    // Tiempos de escritura: cada carácter tarda según su anchura; pausas al final de verso y estrofa.
-    const cps = VELOCIDAD[velocidad];
-    const media = size * 0.42;
-    let t = 0;
     ctx.font = fuenteCss(o.font, size);
     filas.forEach((r) => {
       y += r.gapBefore;
-      if (r.gapBefore) t += 0.45;
       const w = ctx.measureText(r.text).width;
       const x = o.align === 'center' ? (W - w) / 2 : pad + r.indent;
-      const cum: number[] = [0];
-      const times: number[] = [];
-      const t0 = t;
-      for (let i = 1; i <= r.text.length; i++) {
-        cum.push(ctx.measureText(r.text.slice(0, i)).width);
-        const cw = cum[i] - cum[i - 1];
-        const ch = r.text[i - 1];
-        t += ch === ' ' ? 0.6 / cps : Math.max(0.35, cw / media) / cps;
-        times.push(t);
-      }
-      res.lineas.push({ text: r.text, x, y: y + size, w, cum, t0, t1: t, times });
+      const palabras: { text: string; x: number }[] = [];
+      const re = /\S+/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(r.text))) palabras.push({ text: m[0], x: x + ctx.measureText(r.text.slice(0, m.index)).width });
+      res.lineas.push({ text: r.text, x, y: y + size, w, palabras, estrofa: r.estrofa });
       y += lineH;
-      t += 0.3;
     });
-    res.escritura = t;
     if (signH) {
       const font = `italic 500 ${signSize}px "Cormorant Garamond", Georgia, serif`;
-      res.sign = { text: `— ${o.signature}`, x: o.align === 'center' ? W / 2 : pad, y: y + signSize * 1.6, font };
+      res.sign = { text: o.signature, x: o.align === 'center' ? W / 2 : pad, y: y + signSize * 1.6, font };
     }
     return res;
   }
   // Inalcanzable en la práctica: devuelve una maqueta vacía.
-  return { W, H, font: ctx.font, size, lineH: size, lineas: [], paleta, escritura: 0 };
+  return { W, H, font: ctx.font, size, lineH: size, lineas: [], paleta };
 }
 
 // ───────── Dibujo ─────────
 
-function fondo(ctx: CanvasRenderingContext2D, o: LienzoOpts, W: number, H: number) {
+export function fondo(ctx: CanvasRenderingContext2D, o: Pick<LienzoOpts, "style" | "bgImage">, W: number, H: number) {
   const d = Math.max(W, H);
   if (o.style === 'noche') {
-    const g = ctx.createRadialGradient(W * 0.7, H * 0.25, 0, W * 0.7, H * 0.25, d);
-    g.addColorStop(0, '#1d2a47');
-    g.addColorStop(0.55, '#0b1120');
-    g.addColorStop(1, '#05070d');
+    const g = ctx.createRadialGradient(W * 0.72, H * 0.18, 0, W * 0.72, H * 0.18, d * 1.05);
+    g.addColorStop(0, '#2f4677');
+    g.addColorStop(0.45, '#14203d');
+    g.addColorStop(1, '#070b16');
     ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    // Un velo plateado en diagonal, como la luz de la luna sobre el papel.
+    const luz = ctx.createLinearGradient(0, 0, W, H);
+    luz.addColorStop(0, 'rgba(205,216,234,0.10)');
+    luz.addColorStop(0.5, 'rgba(205,216,234,0)');
+    luz.addColorStop(1, 'rgba(205,216,234,0.06)');
+    ctx.fillStyle = luz;
     ctx.fillRect(0, 0, W, H);
   } else if (o.style === 'plata') {
     const g = ctx.createLinearGradient(0, 0, W * 0.6, H);
@@ -298,9 +288,9 @@ function fondo(ctx: CanvasRenderingContext2D, o: LienzoOpts, W: number, H: numbe
     ctx.fillRect(0, 0, W, H);
   } else if (o.style === 'tinta') {
     const g = ctx.createLinearGradient(0, 0, W, H);
-    g.addColorStop(0, '#0b1020');
-    g.addColorStop(0.55, '#1b1640');
-    g.addColorStop(1, '#0c2a33');
+    g.addColorStop(0, '#151236');
+    g.addColorStop(0.55, '#26195a');
+    g.addColorStop(1, '#0e3140');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
     const blob = (x: number, y: number, r: number, c: string) => {
@@ -310,9 +300,9 @@ function fondo(ctx: CanvasRenderingContext2D, o: LienzoOpts, W: number, H: numbe
       ctx.fillStyle = b;
       ctx.fillRect(0, 0, W, H);
     };
-    blob(W * 0.15, H * 0.85, d * 0.45, 'rgba(99,230,226,0.16)');
-    blob(W * 0.85, H * 0.15, d * 0.5, 'rgba(212,140,242,0.16)');
-    blob(W * 0.6, H * 0.6, d * 0.35, 'rgba(143,134,255,0.12)');
+    blob(W * 0.12, H * 0.88, d * 0.55, 'rgba(99,230,226,0.30)');
+    blob(W * 0.9, H * 0.12, d * 0.55, 'rgba(212,140,242,0.30)');
+    blob(W * 0.55, H * 0.55, d * 0.4, 'rgba(143,134,255,0.20)');
   } else {
     ctx.fillStyle = '#111';
     ctx.fillRect(0, 0, W, H);
@@ -341,153 +331,98 @@ function plumaDecorativa(ctx: CanvasRenderingContext2D, o: LienzoOpts, W: number
   ctx.restore();
 }
 
-// Pluma que escribe: la punta (gota de tinta) va en (x, y).
-function plumaEscribiendo(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
-  if (!plumaImg) return;
-  const h = size * 5;
-  const w = (plumaImg.naturalWidth / plumaImg.naturalHeight) * h;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate((22 * Math.PI) / 180);
-  // En la imagen, la punta está abajo, ligeramente a la izquierda del centro.
-  ctx.drawImage(plumaImg, -w * 0.09, -h * 0.985, w, h);
-  ctx.restore();
-}
-
 export interface FrameState {
   t: number; // segundos desde el inicio (Infinity = estático)
   v?: VideoOpts;
 }
 
-export function duracionVideo(m: Maqueta, v: VideoOpts) {
-  const entrada = v.entrada === 'ninguna' ? 0.2 : 0.9;
-  const salida = v.salida === 'ninguna' ? 0.2 : 0.9;
-  return entrada + 0.3 + m.escritura + 0.6 + v.pausa + salida;
+const PASO: Record<Ritmo, number> = { tranquilo: 1.05, normal: 0.62, rapido: 0.38 };
+const ENTRADA = 0.55; // el fondo, el título y la pluma decorativa aparecen primero
+
+// Momento en que empieza a aparecer cada verso.
+function tiempos(m: Maqueta, v: VideoOpts) {
+  const paso = PASO[v.ritmo];
+  const dur = Math.min(1.1, Math.max(0.45, paso * 1.5));
+  let t = ENTRADA;
+  const inicios = m.lineas.map((l, i) => {
+    if (i > 0 && l.estrofa !== m.lineas[i - 1].estrofa) t += paso * 0.7;
+    const inicio = t;
+    // Palabra a palabra: el verso dura según sus palabras.
+    t += v.animacion === 'palabras' ? Math.max(paso, l.palabras.length * paso * 0.28) : paso;
+    return inicio;
+  });
+  const ultimo = m.lineas.length ? inicios[inicios.length - 1] + (v.animacion === 'palabras' ? m.lineas[m.lineas.length - 1].palabras.length * paso * 0.28 : 0) + dur : ENTRADA;
+  return { inicios, dur, fin: ultimo };
 }
 
-const ease = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
+export function duracionVideo(m: Maqueta, v: VideoOpts) {
+  const { fin } = tiempos(m, v);
+  return fin + (m.sign ? 0.5 : 0) + v.pausa + (v.salida === 'fundido' ? 0.9 : 0.15);
+}
+
+const easeOut = (x: number) => 1 - Math.pow(1 - x, 3);
+const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 export function dibujar(ctx: CanvasRenderingContext2D, o: LienzoOpts, m: Maqueta, s: FrameState = { t: Infinity }) {
   const { W, H, paleta } = m;
   const v = s.v;
   const estatico = !isFinite(s.t) || !v;
-  const entrada = v && v.entrada !== 'ninguna' ? 0.9 : 0.2;
+  const tl = v ? tiempos(m, v) : null;
   const total = v ? duracionVideo(m, v) : 0;
-  const salidaDur = v && v.salida !== 'ninguna' ? 0.9 : 0.2;
-  const tEscritura = estatico ? Infinity : s.t - entrada - 0.3;
-  const pIn = estatico ? 1 : ease(Math.min(1, s.t / entrada));
-  const pOut = estatico ? 0 : ease(Math.max(0, Math.min(1, (s.t - (total - salidaDur)) / salidaDur)));
+  // Salida: el texto se funde sobre el fondo, que permanece.
+  const salida = !estatico && v!.salida === 'fundido' ? clamp01((s.t - (total - 0.9)) / 0.9) : 0;
+  const general = 1 - easeOut(salida);
+  const intro = estatico ? 1 : easeOut(clamp01(s.t / ENTRADA));
 
   ctx.save();
   fondo(ctx, o, W, H);
-  plumaDecorativa(ctx, o, W, H, !estatico && v?.pluma ? 0.5 : 1);
+  plumaDecorativa(ctx, o, W, H, intro);
 
-  // Contenido (título, versos, firma) con el desplazamiento de las transiciones.
-  ctx.save();
-  let alphaContenido = 1;
-  if (!estatico && v) {
-    if (v.entrada === 'deslizar' && pIn < 1) {
-      ctx.translate(0, (1 - pIn) * H * 0.06);
-      alphaContenido *= pIn;
-    }
-    if (v.salida === 'deslizar' && pOut > 0) {
-      ctx.translate(0, -pOut * H * 0.06);
-      alphaContenido *= 1 - pOut;
-    }
-  }
-  ctx.globalAlpha = alphaContenido;
   ctx.textBaseline = 'alphabetic';
   if (m.title) {
+    ctx.globalAlpha = intro * general;
     ctx.font = m.title.font;
     ctx.fillStyle = paleta.muted;
     ctx.textAlign = o.align === 'center' ? 'center' : 'left';
-    ctx.letterSpacing = `${Math.round(m.size * 0.08)}px`;
-    ctx.fillText(m.title.text, m.title.x, m.title.y);
-    ctx.letterSpacing = '0px';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round(m.size * 0.08)}px`;
+    ctx.fillText(m.title.text, m.title.x, m.title.y + (1 - intro) * m.size * 0.3);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   }
   ctx.font = m.font;
   ctx.fillStyle = paleta.text;
   ctx.textAlign = 'left';
-  let pen: { x: number; y: number } | null = null;
-  for (const l of m.lineas) {
-    if (tEscritura >= l.t1) {
+  m.lineas.forEach((l, i) => {
+    if (estatico) {
+      ctx.globalAlpha = 1;
       ctx.fillText(l.text, l.x, l.y);
-      continue;
+      return;
     }
-    if (tEscritura <= l.t0) break;
-    // Línea a medias: recorta hasta el punto que va escribiendo la pluma.
-    let k = 0;
-    while (k < l.times.length && l.times[k] <= tEscritura) k++;
-    const prevT = k === 0 ? l.t0 : l.times[k - 1];
-    const frac = k < l.times.length ? (tEscritura - prevT) / (l.times[k] - prevT) : 1;
-    const revealW = l.cum[k] + (l.cum[Math.min(k + 1, l.cum.length - 1)] - l.cum[k]) * Math.max(0, Math.min(1, frac));
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(l.x - m.size, l.y - m.size * 1.3, revealW + m.size, m.size * 2);
-    ctx.clip();
-    ctx.fillText(l.text, l.x, l.y);
-    ctx.restore();
-    pen = { x: l.x + revealW, y: l.y - m.size * 0.18 };
-  }
+    const inicio = tl!.inicios[i];
+    if (s.t <= inicio) return;
+    if (v!.animacion === 'palabras') {
+      const paso = PASO[v!.ritmo] * 0.28;
+      l.palabras.forEach((p, k) => {
+        const q = easeOut(clamp01((s.t - inicio - k * paso) / (tl!.dur * 0.8)));
+        if (q <= 0) return;
+        ctx.globalAlpha = q * general;
+        ctx.fillText(p.text, p.x, l.y + (1 - q) * m.size * 0.35);
+      });
+      return;
+    }
+    const q = easeOut(clamp01((s.t - inicio) / tl!.dur));
+    ctx.globalAlpha = q * general;
+    const dy = v!.animacion === 'ascenso' ? (1 - q) * m.size * 0.7 : (1 - q) * m.size * 0.12;
+    const dx = v!.animacion === 'ascenso' ? 0 : (1 - q) * -m.size * 0.25;
+    ctx.fillText(l.text, l.x + dx, l.y + dy);
+  });
   if (m.sign) {
-    const signAlpha = estatico ? 1 : Math.max(0, Math.min(1, (tEscritura - m.escritura) / 0.6));
-    if (signAlpha > 0) {
-      ctx.globalAlpha = alphaContenido * signAlpha;
+    const q = estatico ? 1 : easeOut(clamp01((s.t - tl!.fin) / 0.6));
+    if (q > 0) {
+      ctx.globalAlpha = q * general;
       ctx.font = m.sign.font;
       ctx.fillStyle = paleta.muted;
       ctx.textAlign = o.align === 'center' ? 'center' : 'left';
       ctx.fillText(m.sign.text, m.sign.x, m.sign.y);
-    }
-  }
-  ctx.restore();
-  if (pen && v?.pluma) plumaEscribiendo(ctx, pen.x, pen.y, m.size);
-
-  // Transiciones que cubren todo el cuadro.
-  if (!estatico && v) {
-    transicion(ctx, W, H, paleta.base, v.entrada, 1 - pIn, 'in');
-    transicion(ctx, W, H, paleta.base, v.salida, pOut, 'out');
-  }
-  ctx.restore();
-}
-
-function transicion(ctx: CanvasRenderingContext2D, W: number, H: number, base: string, tipo: Transicion, cubierto: number, fase: 'in' | 'out') {
-  if (cubierto <= 0.001 || tipo === 'ninguna' || tipo === 'deslizar') {
-    if (tipo === 'deslizar' && cubierto > 0) {
-      ctx.save();
-      ctx.globalAlpha = cubierto * 0.85;
-      ctx.fillStyle = base;
-      ctx.fillRect(0, 0, W, H);
-      ctx.restore();
-    }
-    return;
-  }
-  ctx.save();
-  if (tipo === 'fundido') {
-    ctx.globalAlpha = cubierto;
-    ctx.fillStyle = base;
-    ctx.fillRect(0, 0, W, H);
-  } else {
-    // Tinta: un círculo que se abre (entrada) o se cierra (salida) con borde holográfico.
-    const R = Math.hypot(W, H) / 2;
-    const r = R * (1 - cubierto);
-    const cx = W / 2;
-    const cy = fase === 'in' ? H * 0.55 : H * 0.45;
-    ctx.beginPath();
-    ctx.rect(0, 0, W, H);
-    ctx.arc(cx, cy, Math.max(0, r), 0, Math.PI * 2, true);
-    ctx.fillStyle = base;
-    ctx.fill('evenodd');
-    if (r > 1) {
-      const g = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
-      g.addColorStop(0, '#63e6e2');
-      g.addColorStop(0.5, '#8f86ff');
-      g.addColorStop(1, '#d48cf2');
-      ctx.strokeStyle = g;
-      ctx.lineWidth = Math.max(4, Math.min(W, H) * 0.012);
-      ctx.globalAlpha = Math.min(1, cubierto * 3);
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.stroke();
     }
   }
   ctx.restore();

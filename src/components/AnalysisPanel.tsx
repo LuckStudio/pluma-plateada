@@ -13,6 +13,7 @@ interface Props {
   onTab: (t: PanelTab) => void;
   onUsar: (palabra: string, modo: 'rima' | 'sinonimo') => void;
   vocabulario: string[];
+  compacto?: boolean;
 }
 
 const TABS: [PanelTab, string][] = [
@@ -23,9 +24,9 @@ const TABS: [PanelTab, string][] = [
   ['datos', 'Datos'],
 ];
 
-export function AnalysisPanel({ analisis, linea, palabra, tab, onTab, onUsar, vocabulario }: Props) {
+export function AnalysisPanel({ analisis, linea, palabra, tab, onTab, onUsar, vocabulario, compacto }: Props) {
   return (
-    <div className="stack" style={{ gap: 16 }}>
+    <div className={`stack analisis ${compacto ? 'compacto' : ''}`} style={{ gap: compacto ? 12 : 16 }}>
       <div className="tabs" role="tablist" aria-label="Análisis">
         {TABS.map(([t, l]) => (
           <button key={t} role="tab" aria-selected={tab === t} onClick={() => onTab(t)}>

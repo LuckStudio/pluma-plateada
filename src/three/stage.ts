@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { createFeather } from './feather.js';
 
-export type FeatherMode = 'splash' | 'home' | 'hidden';
+export type FeatherMode = 'intro' | 'home' | 'hidden';
 
 interface Pose {
   x: number; // centro en px de pantalla
@@ -13,6 +13,9 @@ interface Pose {
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const TAU = Math.PI * 2;
+// Ángulo en el que la pluma enseña bien su cara plateada.
+const REPOSO = 0.35;
 
 function studioEnvironment(renderer: THREE.WebGLRenderer) {
   const env = new THREE.Scene();
@@ -57,13 +60,14 @@ export class FeatherStage {
   private ink: THREE.MeshPhysicalMaterial | null;
   private raf = 0;
   private last = 0;
-  private spin = 0;
+  private spin = REPOSO;
   private spinBoost = 0;
   private mode: FeatherMode = 'hidden';
   private anchor: DOMRect | null = null;
   private cur: Pose = { x: 0, y: 0, h: 0, tilt: 0.3, opacity: 0 };
   private pointer = { x: 0, y: 0 };
   private celebrateUntil = 0;
+  private zoomUntil = 0;
   private hiddenSince = 0;
   reduced = false;
 
@@ -103,14 +107,14 @@ export class FeatherStage {
   private onPointer = (e: PointerEvent) => {
     this.pointer.x = (e.clientX / innerWidth) * 2 - 1;
     this.pointer.y = (e.clientY / innerHeight) * 2 - 1;
-    if (this.mode === 'home') this.wake();
+    if (this.mode !== 'hidden') this.wake();
   };
 
   private onTilt = (e: DeviceOrientationEvent) => {
     if (e.gamma == null || e.beta == null) return;
     this.pointer.x = Math.max(-1, Math.min(1, e.gamma / 35));
     this.pointer.y = Math.max(-1, Math.min(1, (e.beta - 45) / 35));
-    if (this.mode === 'home') this.wake();
+    if (this.mode !== 'hidden') this.wake();
   };
 
   setMode(mode: FeatherMode, anchor?: DOMRect | null) {
@@ -124,13 +128,18 @@ export class FeatherStage {
     this.wake();
   }
 
-  // Giro rápido al cambiar de pantalla.
-  transition() {
-    this.spinBoost = 9;
+  // Salida de la bienvenida: la pluma gira, crece y atraviesa la cámara.
+  // Después reaparece desde arriba y se posa en su sitio de Inicio.
+  zoomThrough(ms = 900) {
+    this.zoomUntil = performance.now() + ms;
+    this.spinBoost = this.reduced ? 0 : 16;
     this.wake();
+    setTimeout(() => {
+      this.cur = { x: innerWidth / 2, y: -innerHeight * 0.25, h: innerHeight * 0.2, tilt: 0.9, opacity: 0 };
+    }, ms);
   }
 
-  // Medio giro y destello al guardar o exportar.
+  // Medio giro breve al guardar o exportar.
   celebrate() {
     this.celebrateUntil = performance.now() + 1500;
     this.spinBoost = 7;
@@ -141,14 +150,17 @@ export class FeatherStage {
     const W = innerWidth;
     const H = innerHeight;
     const now = performance.now();
+    if (now < this.zoomUntil) {
+      return { x: W / 2, y: H * 0.42, h: H * 3.2, tilt: 0.1, opacity: 0 };
+    }
     if (now < this.celebrateUntil) {
       const h = Math.min(170, H * 0.22);
       const desktop = W >= 1024;
       return { x: W - (desktop ? 120 : 70), y: H - h / 2 - (desktop ? 40 : 110), h, tilt: 0.45, opacity: 1 };
     }
-    if (this.mode === 'splash') {
-      const h = Math.min(H * 0.56, 560);
-      return { x: W / 2, y: H * 0.4, h, tilt: 0.25, opacity: 1 };
+    if (this.mode === 'intro') {
+      const h = Math.min(H * 0.52, 560);
+      return { x: W / 2, y: H * 0.36, h, tilt: 0.28, opacity: 1 };
     }
     if (this.mode === 'home' && this.anchor) {
       const r = this.anchor;
@@ -168,16 +180,24 @@ export class FeatherStage {
     const dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
     this.last = now;
     const target = this.targetPose();
-    const k = 1 - Math.exp(-dt * (this.reduced ? 20 : 7));
+    const zooming = now < this.zoomUntil;
+    const k = 1 - Math.exp(-dt * (this.reduced ? 20 : zooming ? 4.5 : 7));
     this.cur.x = lerp(this.cur.x, target.x, k);
     this.cur.y = lerp(this.cur.y, target.y, k);
     this.cur.h = lerp(this.cur.h, target.h, k);
     this.cur.tilt = lerp(this.cur.tilt, target.tilt, k);
-    this.cur.opacity = lerp(this.cur.opacity, target.opacity, 1 - Math.exp(-dt * 9));
+    this.cur.opacity = lerp(this.cur.opacity, target.opacity, 1 - Math.exp(-dt * (zooming ? 3 : 9)));
 
-    const baseSpin = this.reduced ? 0 : this.mode === 'splash' ? 0.9 : 0.22;
     this.spinBoost *= Math.exp(-dt * 2.2);
-    this.spin += dt * (baseSpin + this.spinBoost);
+    const quieta = this.mode === 'home' && now > this.celebrateUntil && !zooming;
+    if (quieta) {
+      // En Inicio la pluma se queda quieta: vuelve suavemente a su ángulo de reposo.
+      const destino = Math.round((this.spin - REPOSO) / TAU) * TAU + REPOSO;
+      this.spin = lerp(this.spin, destino, 1 - Math.exp(-dt * (2 + this.spinBoost)));
+    } else {
+      const base = this.reduced ? 0 : this.mode === 'intro' ? 0.6 : 0;
+      this.spin += dt * (base + this.spinBoost);
+    }
 
     // Pantalla → mundo (plano z = 0).
     const viewH = 2 * this.camera.position.z * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
@@ -185,11 +205,11 @@ export class FeatherStage {
     const g = this.feather;
     g.position.set((this.cur.x - innerWidth / 2) * px, -(this.cur.y - innerHeight / 2) * px, 0);
     g.scale.setScalar(Math.max(0.0001, (this.cur.h * px) / this.baseHeight));
-    const follow = this.mode === 'home' && !this.reduced ? 1 : 0;
-    g.rotation.z = -this.cur.tilt + this.pointer.x * 0.12 * follow;
-    g.rotation.x = this.pointer.y * 0.25 * follow;
-    g.rotation.y = this.spin + this.pointer.x * 0.5 * follow;
-    if (!this.reduced) g.position.y += Math.sin(now / 1400) * 0.04 * (this.cur.h * px);
+    const follow = this.reduced ? 0 : this.mode === 'intro' ? 1 : this.mode === 'home' ? 0.35 : 0;
+    g.rotation.z = -this.cur.tilt + this.pointer.x * 0.1 * follow;
+    g.rotation.x = this.pointer.y * 0.2 * follow;
+    g.rotation.y = this.spin + this.pointer.x * 0.4 * follow;
+    if (!this.reduced && this.mode === 'intro') g.position.y += Math.sin(now / 1400) * 0.04 * (this.cur.h * px);
 
     if (this.ink) {
       const s = Math.sin(now / 900);
@@ -201,14 +221,22 @@ export class FeatherStage {
     if (this.cur.opacity > 0.005) this.renderer.render(this.scene, this.camera);
 
     // Duerme cuando no hay nada que mover.
-    const idle = target.opacity === 0 && this.cur.opacity < 0.01;
+    const idle = target.opacity === 0 && this.cur.opacity < 0.01 && !zooming;
     if (idle) {
       this.hiddenSince ||= now;
       if (now - this.hiddenSince > 300) return;
     } else this.hiddenSince = 0;
-    if (this.reduced && !idle && Math.abs(this.cur.h - target.h) < 0.5 && Math.abs(this.cur.opacity - target.opacity) < 0.01 && now > this.celebrateUntil) {
+    const asentada =
+      Math.abs(this.cur.h - target.h) < 0.5 &&
+      Math.abs(this.cur.x - target.x) < 0.5 &&
+      Math.abs(this.cur.y - target.y) < 0.5 &&
+      Math.abs(this.cur.opacity - target.opacity) < 0.01 &&
+      now > this.celebrateUntil &&
+      !zooming;
+    // En Inicio, quieta y asentada: no hace falta seguir dibujando hasta que algo cambie.
+    if (asentada && (this.reduced || (quieta && Math.abs(this.spinBoost) < 0.01 && Math.abs(this.spin - (Math.round((this.spin - REPOSO) / TAU) * TAU + REPOSO)) < 0.001))) {
       this.renderer.render(this.scene, this.camera);
-      return; // en modo reducido no hay animación continua
+      return;
     }
     this.raf = requestAnimationFrame(this.frame);
   };

@@ -14,19 +14,21 @@ import {
   duracionVideo,
   formato,
   maquetar,
+  type Animacion,
   type FontId,
   type FormatId,
   type LienzoOpts,
+  type Ritmo,
   type StyleId,
-  type Transicion,
   type VideoOpts,
 } from '../export/lienzo';
 import { Icon } from '../components/Icon';
 import { Seg, Toggle, TopBar } from '../components/ui';
 import { useFeather } from '../components/Feather';
 import { elegirArchivo, guardarArchivo } from '../lib/download';
-import { useSettings, useToast } from '../lib/hooks';
-import { PoemCard } from './Home';
+import { useMedia, useToast } from '../lib/hooks';
+
+export const FIRMA_POR_DEFECTO = '@pluma_plateada';
 
 export function LienzoPicker() {
   const poems = useLiveQuery(() => db.poems.orderBy('updatedAt').reverse().toArray(), []) ?? [];
@@ -34,7 +36,7 @@ export function LienzoPicker() {
     <main className="screen">
       <TopBar title="Lienzo" />
       <p className="muted" style={{ marginTop: 4 }}>
-        Convierte tus versos en imágenes, vídeos que se escriben solos o láminas para imprimir. Elige un poema:
+        Convierte tus versos en imágenes, vídeos o láminas para imprimir. Elige un poema:
       </p>
       <div className="stack" style={{ marginTop: 16 }}>
         {poems.length === 0 && <p className="empty">Escribe un poema primero.</p>}
@@ -55,7 +57,7 @@ export function LienzoPicker() {
   );
 }
 
-export function Lienzo({ id }: { id: string }) {
+export function Lienzo({ id, salida }: { id: string; salida?: string }) {
   const poem = useLiveQuery(() => db.poems.get(id).then((p) => p ?? null), [id]);
   if (poem === undefined) return <main className="screen" />;
   if (poem === null)
@@ -67,7 +69,7 @@ export function Lienzo({ id }: { id: string }) {
         </Link>
       </main>
     );
-  return <LienzoEditor poem={poem} />;
+  return <LienzoEditor poem={poem} inicial={salida === 'video' ? 'video' : 'imagen'} />;
 }
 
 interface Guardado {
@@ -77,10 +79,11 @@ interface Guardado {
   scale: number;
   showTitle: boolean;
   showFeather: boolean;
+  signature: string;
   video: VideoOpts;
 }
 
-const CLAVE = 'pluma-lienzo';
+const CLAVE = 'pluma-lienzo-v2';
 function leerPreferencias(): Partial<Guardado> {
   try {
     return JSON.parse(localStorage.getItem(CLAVE) ?? '{}');
@@ -91,48 +94,55 @@ function leerPreferencias(): Partial<Guardado> {
 
 type Salida = 'imagen' | 'video' | 'imprenta';
 
-const TRANSICIONES: [Transicion, string][] = [
-  ['tinta', 'Tinta'],
+const ANIMACIONES: [Animacion, string][] = [
+  ['ascenso', 'Ascenso'],
   ['fundido', 'Fundido'],
-  ['deslizar', 'Deslizar'],
-  ['ninguna', 'Ninguna'],
+  ['palabras', 'Palabra a palabra'],
 ];
 
-function LienzoEditor({ poem }: { poem: Poem }) {
+function LienzoEditor({ poem, inicial }: { poem: Poem; inicial: Salida }) {
   const toast = useToast();
   const feather = useFeather();
-  const [settings] = useSettings();
+  const desktop = useMedia('(min-width: 1024px)');
   const prefs = useMemo(leerPreferencias, []);
   const lineas = useMemo(() => poem.text.replace(/\r/g, '').split('\n'), [poem.text]);
   const [sel, setSel] = useState<Set<number>>(() => new Set(lineas.map((l, i) => (l.trim() ? i : -1)).filter((i) => i >= 0)));
   const [format, setFormat] = useState<FormatId>(prefs.format ?? '3:4');
-  const [style, setStyle] = useState<StyleId>(prefs.style && prefs.style !== 'imagen' ? prefs.style : settings.theme);
+  const [style, setStyle] = useState<StyleId>(prefs.style && prefs.style !== 'imagen' ? prefs.style : 'plata');
   const [font, setFont] = useState<FontId>(prefs.font ?? 'cormorant');
   const [align, setAlign] = useState<'left' | 'center'>(poem.align);
   const [scale, setScale] = useState(prefs.scale ?? 1);
   const [showTitle, setShowTitle] = useState(prefs.showTitle ?? true);
   const [showFeather, setShowFeather] = useState(prefs.showFeather ?? true);
-  const [signature, setSignature] = useState(settings.author);
+  const [signature, setSignature] = useState(prefs.signature ?? FIRMA_POR_DEFECTO);
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [video, setVideo] = useState<VideoOpts>({ ...DEFAULT_VIDEO, ...prefs.video });
-  const [salida, setSalida] = useState<Salida>('imagen');
+  const [salida, setSalida] = useState<Salida>(inicial);
   const [ocupado, setOcupado] = useState('');
   const [progreso, setProgreso] = useState(0);
   const [reproduciendo, setReproduciendo] = useState(false);
   const [listo, setListo] = useState(false);
+  const [compacta, setCompacta] = useState(false);
   const canvas = useRef<HTMLCanvasElement>(null);
   const anim = useRef(0);
   const abort = useRef<AbortController | null>(null);
 
-  useEffect(() => setSignature((s) => s || settings.author), [settings.author]);
-
   useEffect(() => {
     try {
-      localStorage.setItem(CLAVE, JSON.stringify({ format, style, font, scale, showTitle, showFeather, video }));
+      localStorage.setItem(CLAVE, JSON.stringify({ format, style, font, scale, showTitle, showFeather, signature, video }));
     } catch {
       /* preferencia opcional */
     }
-  }, [format, style, font, scale, showTitle, showFeather, video]);
+  }, [format, style, font, scale, showTitle, showFeather, signature, video]);
+
+  // En el móvil la vista previa se encoge al bajar, pero siempre queda a la vista.
+  useEffect(() => {
+    if (desktop) return;
+    const on = () => setCompacta(window.scrollY > 40);
+    on();
+    addEventListener('scroll', on, { passive: true });
+    return () => removeEventListener('scroll', on);
+  }, [desktop]);
 
   const opts: LienzoOpts = useMemo(() => {
     const elegidas = lineas.filter((l, i) => {
@@ -155,7 +165,7 @@ function LienzoEditor({ poem }: { poem: Poem }) {
     c.height = Math.round(f.h * PREVIEW);
     const ctx = c.getContext('2d')!;
     ctx.setTransform(PREVIEW, 0, 0, PREVIEW, 0, 0);
-    const m = maquetar(ctx, opts, f.w, f.h, 0, video.velocidad);
+    const m = maquetar(ctx, opts, f.w, f.h, 0);
     return { ctx, m };
   };
 
@@ -173,7 +183,7 @@ function LienzoEditor({ poem }: { poem: Poem }) {
       vivo = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opts, video.velocidad]);
+  }, [opts]);
 
   useEffect(() => () => cancelAnimationFrame(anim.current), []);
 
@@ -205,7 +215,7 @@ function LienzoEditor({ poem }: { poem: Poem }) {
     if (!listo) return 0;
     const c = document.createElement('canvas');
     const f = formato(opts.format);
-    const m = maquetar(c.getContext('2d')!, opts, f.w, f.h, 0, video.velocidad);
+    const m = maquetar(c.getContext('2d')!, opts, f.w, f.h, 0);
     return duracionVideo(m, video);
   }, [opts, video, listo]);
 
@@ -249,16 +259,16 @@ function LienzoEditor({ poem }: { poem: Poem }) {
     <main className="screen wide">
       <TopBar back={`/escribir/${poem.id}`} title={<h1 className="grow">Lienzo</h1>} />
       <div className="lienzo-layout" style={{ marginTop: 8 }}>
-        <div className="stack" style={{ gap: 10 }}>
+        <div className={`lienzo-preview ${compacta ? 'compacta' : ''}`}>
           <div className="canvas-stage">
             <canvas ref={canvas} aria-label={`Vista previa del lienzo en formato ${f.label}`} role="img" />
           </div>
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <span className="meta">
-              {f.label} · {f.mm ? `${f.mm.w}×${f.mm.h} mm a 300 ppp` : `${f.w}×${f.h} px`}
+              {f.label} · {f.mm ? `${f.mm.w}×${f.mm.h} mm` : `${f.w}×${f.h}`}
             </span>
             <button className="btn small" onClick={reproducir} disabled={!listo}>
-              <Icon name={reproduciendo ? 'stop' : 'play'} size={14} /> {reproduciendo ? 'Parar' : `Ver vídeo (${Math.round(duracion)} s)`}
+              <Icon name={reproduciendo ? 'stop' : 'play'} size={14} /> {reproduciendo ? 'Parar' : `Ver animación · ${Math.round(duracion)} s`}
             </button>
           </div>
         </div>
@@ -278,14 +288,12 @@ function LienzoEditor({ poem }: { poem: Poem }) {
 
           <section className="stack" style={{ gap: 8 }}>
             <span className="eyebrow">Estilo</span>
-            <div className="chips">
+            <div className="chips" style={{ gap: 10 }}>
               {(Object.keys(ESTILOS) as StyleId[]).map((s) => (
                 <button
                   key={s}
-                  className="style-btn"
+                  className="estilo"
                   aria-pressed={style === s}
-                  aria-label={`Estilo ${ESTILOS[s].label}`}
-                  style={{ background: MUESTRA[s], backgroundSize: 'cover', backgroundPosition: 'center', backgroundImage: s === 'imagen' && bgImage ? `url(${bgImage.src})` : undefined }}
                   onClick={async () => {
                     if (s !== 'imagen') return setStyle(s);
                     const file = await elegirArchivo('image/*');
@@ -298,7 +306,14 @@ function LienzoEditor({ poem }: { poem: Poem }) {
                     img.src = URL.createObjectURL(file);
                   }}
                 >
-                  <span>{ESTILOS[s].label}</span>
+                  <span
+                    className="estilo-muestra"
+                    // Solo una de las dos propiedades: un backgroundImage vacío borraría el degradado.
+                    style={s === 'imagen' && bgImage ? { backgroundImage: `url(${bgImage.src})`, color: ESTILOS[s].text } : { background: MUESTRA[s], color: ESTILOS[s].text }}
+                  >
+                    {s === 'imagen' && !bgImage ? <Icon name="upload" size={18} /> : 'Aa'}
+                  </span>
+                  <span className="estilo-nombre">{ESTILOS[s].label}</span>
                 </button>
               ))}
             </div>
@@ -406,46 +421,47 @@ function LienzoEditor({ poem }: { poem: Poem }) {
             {salida === 'video' && (
               <div className="stack" style={{ gap: 12 }}>
                 <p className="meta" style={{ margin: 0 }}>
-                  Los versos se escriben letra a letra, con la pluma trazándolos, en el formato {f.label}.
+                  El fondo se ve desde el primer momento y cada verso aparece con un fundido. Se exporta en {f.label}.
                 </p>
                 <div className="stack" style={{ gap: 6 }}>
-                  <span style={{ fontSize: 14 }}>Entrada</span>
+                  <span style={{ fontSize: 14 }}>Animación de los versos</span>
                   <div className="chips">
-                    {TRANSICIONES.map(([t, l]) => (
-                      <button key={t} className="chip" aria-pressed={video.entrada === t} onClick={() => setVideo({ ...video, entrada: t })}>
+                    {ANIMACIONES.map(([a, l]) => (
+                      <button key={a} className="chip" aria-pressed={video.animacion === a} onClick={() => setVideo({ ...video, animacion: a })}>
                         {l}
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="stack" style={{ gap: 6 }}>
-                  <span style={{ fontSize: 14 }}>Salida</span>
-                  <div className="chips">
-                    {TRANSICIONES.map(([t, l]) => (
-                      <button key={t} className="chip" aria-pressed={video.salida === t} onClick={() => setVideo({ ...video, salida: t })}>
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 14 }}>Velocidad</span>
+                <div className="row wrap" style={{ justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 14 }}>Ritmo</span>
                   <Seg
-                    label="Velocidad de escritura"
-                    value={video.velocidad}
-                    onChange={(velocidad) => setVideo({ ...video, velocidad })}
+                    label="Ritmo"
+                    value={video.ritmo}
+                    onChange={(ritmo: Ritmo) => setVideo({ ...video, ritmo })}
                     options={[
-                      ['lenta', 'Lenta'],
+                      ['tranquilo', 'Tranquilo'],
                       ['normal', 'Normal'],
-                      ['rapida', 'Rápida'],
+                      ['rapido', 'Rápido'],
+                    ]}
+                  />
+                </div>
+                <div className="row wrap" style={{ justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 14 }}>Final</span>
+                  <Seg
+                    label="Final del vídeo"
+                    value={video.salida}
+                    onChange={(salida) => setVideo({ ...video, salida })}
+                    options={[
+                      ['fundido', 'Fundido'],
+                      ['ninguna', 'Corte'],
                     ]}
                   />
                 </div>
                 <label className="field">
-                  Pausa final: {video.pausa.toFixed(1)} s
+                  Pausa con el poema completo: {video.pausa.toFixed(1)} s
                   <input type="range" min={0.5} max={6} step={0.5} value={video.pausa} onChange={(e) => setVideo({ ...video, pausa: Number(e.target.value) })} />
                 </label>
-                <Toggle label="Pluma escribiendo" checked={video.pluma} onChange={(pluma) => setVideo({ ...video, pluma })} />
                 {ocupado === 'video' ? (
                   <div className="stack" style={{ gap: 8 }}>
                     <div className="progress" style={{ height: 6 }}>
@@ -460,7 +476,7 @@ function LienzoEditor({ poem }: { poem: Poem }) {
                   </div>
                 ) : (
                   <button className="btn primary block" disabled={!!ocupado} onClick={() => exportar('video')}>
-                    <Icon name="video" size={18} /> Exportar vídeo ({Math.round(duracion)} s)
+                    <Icon name="video" size={18} /> Exportar vídeo · {Math.round(duracion)} s
                   </button>
                 )}
               </div>
@@ -486,7 +502,7 @@ function LienzoEditor({ poem }: { poem: Poem }) {
 const MUESTRA: Record<StyleId, string> = {
   plata: 'linear-gradient(160deg, #f6f8fb 0%, #d3d9e3 60%, #a9b2c2 100%)',
   papel: '#f2eee5',
-  noche: 'radial-gradient(120% 80% at 70% 20%, #1d2a47 0%, #0b1120 60%, #05070d 100%)',
-  tinta: 'linear-gradient(135deg, #0b1020 0%, #1b1640 55%, #0c2a33 100%)',
-  imagen: 'repeating-linear-gradient(45deg, #9aa3b5 0 8px, #c3cad6 8px 16px)',
+  noche: 'radial-gradient(120% 90% at 72% 18%, #2f4677 0%, #14203d 50%, #070b16 100%)',
+  tinta: 'radial-gradient(70% 70% at 12% 88%, rgba(99,230,226,0.45), transparent 60%), radial-gradient(70% 70% at 90% 12%, rgba(212,140,242,0.5), transparent 60%), linear-gradient(135deg, #151236 0%, #26195a 55%, #0e3140 100%)',
+  imagen: 'linear-gradient(135deg, #9aa3b5, #c3cad6)',
 };

@@ -40,6 +40,13 @@ const P: Record<string, string> = {
   copy: 'M8 8h11v13H8zM5 16V3h11',
   eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12M12 15a3 3 0 100-6 3 3 0 000 6',
   install: 'M7 3h10v18H7zM12 7v7M9 11l3 3 3-3',
+  filter: 'M4 6h16M7 12h10M10 18h4',
+  group: 'M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z',
+  sort: 'M7 4v16M4 17l3 3 3-3M14 6h6M14 11h4M14 16h2',
+  tag: 'M3 12V4h8l10 10-8 8zM7.5 8.5h.01',
+  chevLeft: 'M15 5l-7 7 7 7',
+  chevRight: 'M9 5l7 7-7 7',
+  zoom: 'M11 17.5a6.5 6.5 0 100-13 6.5 6.5 0 000 13M20 20l-4.2-4.2M8 11h6M11 8v6',
 };
 
 export type IconName = keyof typeof P;

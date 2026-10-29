@@ -6,17 +6,20 @@ import plumin from '../assets/plumin.png';
 
 export function Sheet({ open, onClose, title, children, label }: { open: boolean; onClose: () => void; title?: string; label?: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
+  const cerrar = useRef(onClose);
+  cerrar.current = onClose;
+  // Solo al abrir: si dependiera de onClose, cada tecla pulsada robaría el foco al campo de texto.
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    ref.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    if (!ref.current?.contains(document.activeElement)) ref.current?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && cerrar.current();
     addEventListener('keydown', onKey);
     return () => {
       removeEventListener('keydown', onKey);
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   // En un portal: así la hoja queda por encima de la navegación fija.
   return createPortal(

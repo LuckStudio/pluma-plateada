@@ -1,6 +1,6 @@
 // Diccionario (tesauro de LibreOffice, LGPL): sinónimos y vocabulario para buscar rimas.
 // Se descarga solo la primera vez que se necesita.
-import { riman, analizarPalabra } from '../poesia';
+import { terminacion, analizarPalabra } from '../poesia';
 
 interface Tesauro {
   s: Record<string, string[][]>;
@@ -42,17 +42,35 @@ export function silabasDe(palabra: string) {
   return analizarPalabra(palabra).silabas.length;
 }
 
+// Índice de terminaciones del vocabulario: se calcula una vez y las búsquedas son inmediatas.
+let indice: { w: string; cons: string; ason: string }[] | null = null;
+async function indiceRimas() {
+  if (indice) return indice;
+  const t = await cargarDiccionario();
+  indice = t.v.flatMap((w) => {
+    const r = terminacion(w);
+    return r ? [{ w, cons: r.consonante, ason: r.asonante }] : [];
+  });
+  return indice;
+}
+
 // Busca rimas en el vocabulario del diccionario y en las palabras del propio usuario.
 export async function buscarRimas(palabra: string, modo: 'consonante' | 'asonante', extra: string[] = [], max = 80) {
-  const t = await cargarDiccionario();
-  const vistas = new Set<string>();
+  const base = terminacion(palabra);
+  if (!base) return [];
+  const clave = modo === 'consonante' ? base.consonante : base.asonante;
+  const propia = palabra.toLowerCase();
+  const vistas = new Set<string>([propia]);
   const out: string[] = [];
-  const pool = [...new Set([...extra.map((w) => w.toLowerCase()), ...t.v])];
-  for (const w of pool) {
+  const delUsuario = extra.flatMap((w) => {
+    const r = terminacion(w);
+    return r ? [{ w: w.toLowerCase(), cons: r.consonante, ason: r.asonante }] : [];
+  });
+  for (const e of [...delUsuario, ...(await indiceRimas())]) {
     if (out.length >= max) break;
-    if (w.length < 2 || vistas.has(w)) continue;
-    vistas.add(w);
-    if (riman(palabra, w, modo)) out.push(w);
+    if (e.w.length < 2 || vistas.has(e.w)) continue;
+    vistas.add(e.w);
+    if ((modo === 'consonante' ? e.cons : e.ason) === clave) out.push(e.w);
   }
   // Primero las palabras más cortas (más fáciles de encajar en el verso).
   return out.sort((a, b) => silabasDe(a) - silabasDe(b) || a.localeCompare(b, 'es'));

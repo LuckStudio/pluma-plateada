@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Route, Router, Switch, useLocation } from 'wouter';
 import { useHashLocation } from 'wouter/use-hash-location';
 import { memoryLocation } from 'wouter/memory-location';
@@ -9,9 +9,10 @@ import { ToastCtx, useSettings, useToasts } from './lib/hooks';
 import { Home } from './screens/Home';
 import { EditorScreen } from './screens/Editor';
 import { Books, BookDetail } from './screens/Books';
+import { VistaLibro } from './screens/VistaLibro';
 import { Lienzo, LienzoPicker } from './screens/Lienzo';
 import { Ajustes } from './screens/Ajustes';
-import plumaImg from './assets/pluma.png';
+import { Intro } from './screens/Intro';
 
 // Incrustada (p. ej. en un artefacto) el hash no es fiable: la navegación vive en memoria.
 const ubicacion = window.self !== window.top ? memoryLocation({ path: '/' }).hook : useHashLocation;
@@ -19,7 +20,7 @@ const ubicacion = window.self !== window.top ? memoryLocation({ path: '/' }).hoo
 const THEME_COLOR = { plata: '#f3f5f9', papel: '#f4efe4', noche: '#070a12', tinta: '#0b0a1a' } as const;
 
 export function App() {
-  const [settings] = useSettings();
+  const [settings, , cargados] = useSettings();
   const { items, push } = useToasts();
   const [ready, setReady] = useState(false);
 
@@ -38,9 +39,7 @@ export function App() {
     <ToastCtx.Provider value={push}>
       <FeatherProvider animation={settings.animation}>
         <ConfirmProvider>
-          <Router hook={ubicacion}>
-            <Shell ready={ready} />
-          </Router>
+          <Router hook={ubicacion}>{cargados && <Shell ready={ready} bienvenida={settings.showIntro} />}</Router>
         </ConfirmProvider>
         <div className="toasts" role="status" aria-live="polite">
           {items.map((t) => (
@@ -54,78 +53,60 @@ export function App() {
   );
 }
 
-function Shell({ ready }: { ready: boolean }) {
+type Fase = 'bienvenida' | 'revelando' | 'lista';
+
+function Shell({ ready, bienvenida }: { ready: boolean; bienvenida: boolean }) {
   const [loc, navigate] = useLocation();
   const feather = useFeather();
-  const [splash, setSplash] = useState<'on' | 'fade' | 'off'>('on');
-  const prev = useRef(loc);
+  const [fase, setFase] = useState<Fase>(bienvenida ? 'bienvenida' : 'lista');
 
-  // Pantalla de carga: la pluma gira al menos un momento mientras se abre el cuaderno.
+  // Tras la bienvenida, la pluma se posa en Inicio; en otras pantallas se retira.
   useEffect(() => {
-    feather.setMode('splash');
-    const min = new Promise((r) => setTimeout(r, feather.enabled ? 1400 : 600));
-    let alive = true;
-    min.then(() => {
-      if (!alive) return;
-      setSplash('fade');
-      setTimeout(() => alive && setSplash('off'), 500);
-    });
-    return () => {
-      alive = false;
-    };
+    if (fase !== 'bienvenida' && loc !== '/') feather.setMode('hidden');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fase]);
 
-  // Al terminar la carga la pluma vuela a su sitio en Inicio; en otras pantallas se retira.
   useEffect(() => {
-    if (splash === 'fade' && loc !== '/') feather.setMode('hidden');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [splash]);
-
-  // Transición entre secciones (no al teclear dentro del mismo poema).
-  useEffect(() => {
-    const seccion = (p: string) => p.split('/')[1] ?? '';
-    if (seccion(prev.current) !== seccion(loc)) feather.transition();
-    prev.current = loc;
     window.scrollTo(0, 0);
-  }, [loc, feather]);
+  }, [loc]);
 
   const escribir = async () => navigate(`/escribir/${await createPoem()}`);
-  const enEditor = loc.startsWith('/escribir');
+  const enEditor = loc.startsWith('/escribir') || loc.endsWith('/vista');
+  const seccion = loc.split('/')[1] ?? '';
+  const mostrar = ready && fase !== 'bienvenida';
 
   return (
     <>
-      <div className={`shell ${splash !== 'on' ? 'entrando' : ''}`}>
-        {ready && splash !== 'on' && (
-          <Switch>
-            <Route path="/" component={Home} />
-            <Route path="/escribir/:id">{(p) => <EditorScreen key={p.id} id={p.id} />}</Route>
-            <Route path="/libros" component={Books} />
-            <Route path="/libros/:id">{(p) => <BookDetail key={p.id} id={p.id} />}</Route>
-            <Route path="/lienzo" component={LienzoPicker} />
-            <Route path="/lienzo/:id">{(p) => <Lienzo key={p.id} id={p.id} />}</Route>
-            <Route path="/ajustes" component={Ajustes} />
-            <Route>
-              <Home />
-            </Route>
-          </Switch>
+      <div className={`shell ${fase === 'revelando' ? 'revelar' : ''}`}>
+        {mostrar && (
+          // Cada sección entra con un fundido suave.
+          <div key={seccion} className="ruta">
+            <Switch>
+              <Route path="/" component={Home} />
+              <Route path="/escribir/:id">{(p) => <EditorScreen key={p.id} id={p.id} />}</Route>
+              <Route path="/libros" component={Books} />
+              <Route path="/libros/:id">{(p) => <BookDetail key={p.id} id={p.id} />}</Route>
+              <Route path="/libros/:id/vista">{(p) => <VistaLibro key={p.id} id={p.id} />}</Route>
+              <Route path="/lienzo" component={LienzoPicker} />
+              <Route path="/lienzo/:id/:salida?">{(p) => <Lienzo key={p.id} id={p.id} salida={p.salida} />}</Route>
+              <Route path="/ajustes" component={Ajustes} />
+              <Route>
+                <Home />
+              </Route>
+            </Switch>
+          </div>
         )}
       </div>
-      {splash !== 'on' && <Navigation onWrite={escribir} sinBarraInferior={enEditor} />}
-      {splash !== 'off' && (
-        <div className={`splash ${splash === 'fade' ? 'fade' : ''}`} aria-label="Cargando Pluma Plateada" role="status">
-          {!feather.enabled && <StaticFeather />}
-          <div className="name">Pluma Plateada</div>
-          <div className="bar">
-            <div />
-          </div>
-          <div className="eyebrow">Abriendo tu cuaderno</div>
-        </div>
+      {mostrar && <Navigation onWrite={escribir} sinBarraInferior={enEditor} />}
+      {fase !== 'lista' && (
+        <Intro
+          ready={ready}
+          onEntrar={() => {
+            setFase('revelando');
+            setTimeout(() => setFase('lista'), 1300);
+          }}
+        />
       )}
     </>
   );
-}
-
-function StaticFeather() {
-  return <img className="splash-feather-static" src={plumaImg} alt="" />;
 }

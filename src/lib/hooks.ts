@@ -2,9 +2,10 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { DEFAULT_SETTINGS, db, saveSettings, type Settings } from '../db/db';
 
-export function useSettings(): [Settings, (p: Partial<Settings>) => Promise<void>] {
-  const s = useLiveQuery(() => db.settings.get('app'), []);
-  return [{ ...DEFAULT_SETTINGS, ...s }, saveSettings];
+// El tercer valor indica si ya se leyeron de la base de datos.
+export function useSettings(): [Settings, (p: Partial<Settings>) => Promise<void>, boolean] {
+  const s = useLiveQuery(() => db.settings.get('app').then((x) => x ?? null), []);
+  return [{ ...DEFAULT_SETTINGS, ...(s ?? {}) }, saveSettings, s !== undefined];
 }
 
 // Avisos breves.
