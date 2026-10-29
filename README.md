@@ -279,11 +279,9 @@ npm run export     # exporta la pluma a public/pluma.glb
 
 ### Publicar en GitHub Pages
 
-El flujo [`.github/workflows/pages.yml`](.github/workflows/pages.yml) prueba, compila y publica la app cada vez que se sube algo a `main`. Para activarlo:
+El flujo [`.github/workflows/pages.yml`](.github/workflows/pages.yml) prueba y compila la app cada vez que se sube algo a `main`, y deja el resultado en la rama `gh-pages`. GitHub Pages sirve esa rama en `https://<usuario>.github.io/pluma-plateada/`.
 
-1. En el repositorio, ve a **Settings → Pages**.
-2. En **Source**, elige **GitHub Actions**.
-3. La app quedará en `https://<usuario>.github.io/pluma-plateada/`.
+Si Pages no se activa solo, en **Settings → Pages** elige **Deploy from a branch**, rama **`gh-pages`**, carpeta **`/ (root)`**.
 
 ### Estructura
 
